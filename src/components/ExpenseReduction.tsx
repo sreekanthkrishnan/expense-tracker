@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Icon } from './common/Icon';
 import { useAppSelector } from '../store/hooks';
 import { generateReductionSuggestions, analyzeSpending } from '../utils/expenseReduction';
 import type { ExpenseReductionSuggestion } from '../types';
@@ -95,7 +96,7 @@ const ExpenseReduction = () => {
         {suggestions.length === 0 ? (
           <div className="card">
             <div className="empty-state">
-              <div className="empty-state-icon">💡</div>
+              <Icon name="MessageCircle" size={48} className="text-gray-400 opacity-50" />
               <p className="empty-state-text mb-2">No suggestions available</p>
               <p className="text-xs text-gray-500">Add some expenses to get personalized recommendations!</p>
             </div>

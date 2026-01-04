@@ -3,6 +3,7 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { loadGoals, saveGoal, deleteGoal, calculateGoalFeasibility } from '../store/slices/savingsGoalSlice';
 import type { SavingsGoal, GoalPriority, GoalStatus } from '../types';
 import Modal from './Modal';
+import { Icon } from './common/Icon';
 
 const SavingsGoalModule = () => {
   const dispatch = useAppDispatch();
@@ -84,11 +85,11 @@ const SavingsGoalModule = () => {
   const getStatusColor = (status?: GoalStatus) => {
     switch (status) {
       case 'Achievable':
-        return 'bg-green-100 text-green-800';
+        return 'bg-brand-yellow bg-opacity-20 text-brand-dark-purple';
       case 'Achievable with cuts':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-brand-yellow bg-opacity-30 text-brand-dark-purple';
       case 'Unrealistic':
-        return 'bg-red-100 text-red-800';
+        return 'bg-brand-pink bg-opacity-20 text-brand-pink';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -115,7 +116,7 @@ const SavingsGoalModule = () => {
         {goals.length === 0 ? (
           <div className="col-span-full card">
             <div className="empty-state">
-              <div className="empty-state-icon">🎯</div>
+              <Icon name="Target" size={48} className="text-gray-400 opacity-50" />
               <p className="empty-state-text mb-2">No savings goals yet</p>
               <button onClick={() => setShowForm(true)} className="btn-primary mt-4">
                 Create Your First Goal

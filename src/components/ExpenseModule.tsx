@@ -1,8 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { loadExpenses, saveExpense, deleteExpense, addCategory } from '../store/slices/expenseSlice';
 import type { Expense } from '../types';
 import Modal from './Modal';
+import { Icon } from './common/Icon';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 
 const ExpenseModule = () => {
   const dispatch = useAppDispatch();
@@ -88,15 +98,34 @@ const ExpenseModule = () => {
     .reduce((sum, e) => sum + e.amount, 0);
 
   // Category breakdown
-  const categoryTotals = expenses
-    .filter((expense) => {
-      const date = new Date(expense.date);
-      return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-    })
-    .reduce((acc, expense) => {
-      acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
-      return acc;
-    }, {} as Record<string, number>);
+  const categoryTotals = useMemo(() => {
+    return expenses
+      .filter((expense) => {
+        const date = new Date(expense.date);
+        return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+      })
+      .reduce((acc, expense) => {
+        acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
+        return acc;
+      }, {} as Record<string, number>);
+  }, [expenses, currentMonth, currentYear]);
+
+  // Chart data for visualization
+  const categoryChartData = useMemo(() => {
+    return Object.entries(categoryTotals)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [categoryTotals]);
+
+  // Chart colors
+  const CHART_COLORS = [
+    'var(--color-expense)',
+    'var(--color-primary)',
+    'var(--color-active)',
+    'var(--color-warning)',
+    'var(--color-income)',
+    'var(--color-savings)',
+  ];
 
   return (
     <div>
@@ -124,21 +153,73 @@ const ExpenseModule = () => {
       </div>
 
       {/* Category Breakdown */}
-      {Object.keys(categoryTotals).length > 0 && (
+      {categoryChartData.length > 0 && (
         <div className="card mb-6">
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Category Breakdown (This Month)</h3>
-          <div className="space-y-3">
-            {[...Object.entries(categoryTotals)]
-              .sort(([, a], [, b]) => b - a)
-              .map(([category, total]) => (
-                <div key={category} className="flex justify-between items-center p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                  <span className="text-sm font-medium text-gray-700">{category}</span>
-                  <span className="text-sm text-money status-expense">
-                    {currencySymbol}
-                    {total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
+          
+          {/* Bar Chart */}
+          <div className="mb-6">
+            <div className="w-full" style={{ height: '240px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={categoryChartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fontSize: 11 }} 
+                    angle={-45} 
+                    textAnchor="end" 
+                    height={80}
+                  />
+                  <YAxis tick={{ fontSize: 12 }} width={60} />
+                  <Tooltip 
+                    formatter={(value: number | undefined) => value !== undefined ? `${currencySymbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    fill="var(--color-expense)" 
+                    radius={[8, 8, 0, 0]}
+                    isAnimationActive={true}
+                    animationDuration={400}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Category List with Details */}
+          <div className="space-y-2 pt-4 border-t border-gray-200">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">Category Details</h4>
+            {categoryChartData.map((item, index) => {
+              const percentage = (item.value / monthlyTotal) * 100;
+              return (
+                <div key={item.name} className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium text-gray-700">{item.name}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500">{percentage.toFixed(1)}%</span>
+                      <span className="text-sm text-money status-expense font-semibold">
+                        {currencySymbol}
+                        {item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-2 rounded-full transition-all duration-500"
+                      style={{ 
+                        width: `${percentage}%`,
+                        backgroundColor: CHART_COLORS[index % CHART_COLORS.length]
+                      }}
+                      role="progressbar"
+                      aria-valuenow={percentage}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    />
+                  </div>
                 </div>
-              ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -275,7 +356,7 @@ const ExpenseModule = () => {
       {expenses.length === 0 ? (
         <div className="card">
           <div className="empty-state">
-            <div className="empty-state-icon">💸</div>
+            <Icon name="TrendingDown" size={48} className="text-gray-400 opacity-50" />
             <p className="empty-state-text mb-2">No expenses yet</p>
             <button onClick={() => setShowForm(true)} className="btn-primary mt-4">
               Add Your First Expense

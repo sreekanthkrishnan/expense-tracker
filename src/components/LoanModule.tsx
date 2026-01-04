@@ -3,6 +3,22 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { loadLoans, saveLoan, deleteLoan, calculateEMI } from '../store/slices/loanSlice';
 import type { Loan, LoanType, LoanInterestType, LoanStatus } from '../types';
 import Modal from './Modal';
+import LoanSummaryCard from './LoanSummaryCard';
+import LoanProgressBar from './LoanProgressBar';
+import RemainingEmiInfo from './RemainingEmiInfo';
+import EarlyClosureTips from './EarlyClosureTips';
+import EditEmiModal from './EditEmiModal';
+import EditTenureModal from './EditTenureModal';
+import PrepaymentSimulator from './PrepaymentSimulator';
+import { Icon } from './common/Icon';
+import {
+  calculateLoanProgress,
+  generateEarlyClosureTips,
+  isHighInterestLoan,
+  isLongTenureLoan,
+  isInterestHeavyLoan,
+} from '../utils/loanCalculations';
+import { calculateNewTenureFromEMI, calculateNewEMIFromTenure } from '../utils/emiTenureCalculator';
 
 const LoanModule = () => {
   const dispatch = useAppDispatch();
@@ -10,6 +26,9 @@ const LoanModule = () => {
   const { profile } = useAppSelector((state) => state.profile);
   const [showForm, setShowForm] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [editingEmiLoan, setEditingEmiLoan] = useState<Loan | null>(null);
+  const [editingTenureLoan, setEditingTenureLoan] = useState<Loan | null>(null);
   const [formData, setFormData] = useState<Partial<Loan>>({
     name: '',
     type: 'taken',
@@ -92,6 +111,95 @@ const LoanModule = () => {
     }
   };
 
+  const handleUpdateEmiTenure = (loan: Loan, newEMI: number, newRemainingTenure: number) => {
+    // Calculate how many EMIs have been paid
+    const progress = calculateLoanProgress(loan);
+    const emisPaid = progress.emisPaid;
+    
+    // Update loan with new EMI and adjusted total tenure
+    // Total tenure = EMIs paid + new remaining tenure
+    const updatedLoan: Loan = {
+      ...loan,
+      emi: newEMI,
+      tenure: emisPaid + newRemainingTenure,
+    };
+    
+    // Outstanding balance remains the same as it represents current state
+    // The new EMI and tenure will be used for future calculations
+    dispatch(saveLoan(updatedLoan));
+  };
+
+  const handleApplyPrepayment = (loan: Loan, prepaymentAmount: number, mode: 'TENURE' | 'EMI') => {
+    const progress = calculateLoanProgress(loan);
+    const newOutstandingBalance = loan.outstandingBalance - prepaymentAmount;
+    
+    if (newOutstandingBalance <= 0) {
+      // Loan fully paid off
+      const updatedLoan: Loan = {
+        ...loan,
+        outstandingBalance: 0,
+        status: 'Closed',
+      };
+      dispatch(saveLoan(updatedLoan));
+      return;
+    }
+
+    let updatedLoan: Loan;
+    
+    if (mode === 'TENURE') {
+      // Keep EMI same, recalculate tenure
+      const result = calculateNewTenureFromEMI(
+        { ...loan, outstandingBalance: newOutstandingBalance },
+        loan.emi
+      );
+      const emisPaid = progress.emisPaid;
+      updatedLoan = {
+        ...loan,
+        outstandingBalance: newOutstandingBalance,
+        tenure: emisPaid + result.newTenure,
+      };
+    } else {
+      // Keep tenure same, recalculate EMI
+      const result = calculateNewEMIFromTenure(
+        { ...loan, outstandingBalance: newOutstandingBalance },
+        progress.emisRemaining
+      );
+      updatedLoan = {
+        ...loan,
+        outstandingBalance: newOutstandingBalance,
+        emi: result.newEMI,
+      };
+    }
+    
+    dispatch(saveLoan(updatedLoan));
+  };
+
+  const toggleCardExpand = (id: string) => {
+    setExpandedCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const getLoanBadges = (loan: Loan) => {
+    const badges: Array<{ label: string; color: string }> = [];
+    if (isHighInterestLoan(loan)) {
+      badges.push({ label: 'High Interest', color: 'bg-brand-pink bg-opacity-20 text-brand-pink' });
+    }
+    if (isLongTenureLoan(loan)) {
+      badges.push({ label: 'Long Tenure', color: 'bg-brand-yellow bg-opacity-30 text-brand-dark-purple' });
+    }
+    if (isInterestHeavyLoan(loan)) {
+      badges.push({ label: 'Interest Heavy', color: 'bg-brand-yellow bg-opacity-20 text-brand-dark-purple' });
+    }
+    return badges;
+  };
+
   const currency = profile?.currency || 'USD';
   const currencySymbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'INR' ? '₹' : currency;
 
@@ -123,7 +231,7 @@ const LoanModule = () => {
         </button>
       </div>
 
-      {/* Summary Cards */}
+      {/* Enhanced Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
         <div className="card">
           <p className="text-xs sm:text-sm text-gray-600 mb-1.5">Total Monthly EMI (Active)</p>
@@ -146,6 +254,31 @@ const LoanModule = () => {
           </p>
         </div>
       </div>
+
+      {/* Loan Summary Card */}
+      <LoanSummaryCard loans={loans} currencySymbol={currencySymbol} />
+
+      {/* Edit EMI Modal */}
+      {editingEmiLoan && (
+        <EditEmiModal
+          isOpen={!!editingEmiLoan}
+          onClose={() => setEditingEmiLoan(null)}
+          loan={editingEmiLoan}
+          currencySymbol={currencySymbol}
+          onSave={handleUpdateEmiTenure}
+        />
+      )}
+
+      {/* Edit Tenure Modal */}
+      {editingTenureLoan && (
+        <EditTenureModal
+          isOpen={!!editingTenureLoan}
+          onClose={() => setEditingTenureLoan(null)}
+          loan={editingTenureLoan}
+          currencySymbol={currencySymbol}
+          onSave={handleUpdateEmiTenure}
+        />
+      )}
 
       {/* Form Modal */}
       <Modal
@@ -265,7 +398,7 @@ const LoanModule = () => {
                 </div>
               </div>
               {formData.emi && formData.emi > 0 && (
-                <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                <div className="bg-brand-purple bg-opacity-10 border border-brand-purple border-opacity-30 p-4 rounded-lg">
                   <p className="text-sm font-medium text-gray-900">
                     <span className="text-gray-600">Calculated EMI:</span>{' '}
                     <span className="text-money status-loan">
@@ -368,7 +501,7 @@ const LoanModule = () => {
       {loans.length === 0 ? (
         <div className="card">
           <div className="empty-state">
-            <div className="empty-state-icon">🏦</div>
+            <Icon name="CreditCard" size={48} className="text-gray-400 opacity-50" />
             <p className="empty-state-text mb-2">No loans yet</p>
             <button onClick={() => setShowForm(true)} className="btn-primary mt-4">
               Add Your First Loan
@@ -377,156 +510,362 @@ const LoanModule = () => {
         </div>
       ) : (
         <>
-          {/* Mobile Card View */}
+          {/* Mobile Card View - Enhanced */}
           <div className="block sm:hidden space-y-3">
-            {loans.map((loan) => (
-              <div key={loan.id} className="card">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900 text-sm">{loan.name}</h3>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {loan.type === 'taken' ? 'Loan Taken' : 'Loan Given'} • {new Date(loan.startDate).toLocaleDateString()}
-                    </p>
+            {loans.map((loan) => {
+              const progress = calculateLoanProgress(loan);
+              const tips = loan.status === 'Active' && loan.type === 'taken' ? generateEarlyClosureTips(loan, currencySymbol) : [];
+              const badges = loan.status === 'Active' && loan.type === 'taken' ? getLoanBadges(loan) : [];
+              const isExpanded = expandedCards.has(loan.id);
+
+              return (
+                <div key={loan.id} className="card">
+                  {/* Header with badges */}
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-gray-900 text-sm">{loan.name}</h3>
+                        {badges.map((badge, idx) => (
+                          <span
+                            key={idx}
+                            className={`px-2 py-0.5 text-xs font-semibold rounded-full ${badge.color}`}
+                          >
+                            {badge.label}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {loan.type === 'taken' ? 'Loan Taken' : 'Loan Given'} • {new Date(loan.startDate).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                            loan.status === 'Active'
+                              ? 'bg-brand-yellow bg-opacity-20 text-brand-dark-purple'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {loan.status}
+                        </span>
+                      <button
+                        onClick={() => toggleCardExpand(loan.id)}
+                        className="btn-icon text-gray-400 hover:text-gray-600"
+                        aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                      >
+                        <Icon 
+                          name="ChevronDown" 
+                          size={20} 
+                          className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        />
+                      </button>
+                    </div>
                   </div>
-                  <span
-                    className={`px-2 py-1 text-xs font-semibold rounded-full ml-2 ${
-                      loan.status === 'Active'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
-                    {loan.status}
-                  </span>
+
+                  {/* Remaining EMIs - Prominent */}
+                  {loan.status === 'Active' && loan.type === 'taken' && (
+                    <RemainingEmiInfo progress={progress} currencySymbol={currencySymbol} />
+                  )}
+
+                  {/* EMI Progress Bar */}
+                  {loan.status === 'Active' && loan.type === 'taken' && (
+                    <LoanProgressBar progress={progress} loanName={loan.name} />
+                  )}
+
+                  {/* Key Metrics */}
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <p className="text-xs text-gray-600">Principal</p>
+                      <p className="text-sm font-medium text-gray-900 text-money">
+                        {currencySymbol}
+                        {loan.principal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600">EMI</p>
+                      <p className="text-sm font-medium status-loan text-money">
+                        {currencySymbol}
+                        {loan.emi.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    {loan.status === 'Active' && loan.type === 'taken' && (
+                      <>
+                        <div>
+                          <p className="text-xs text-gray-600">Outstanding</p>
+                          <p className="text-sm font-medium text-gray-900 text-money">
+                            {currencySymbol}
+                            {loan.outstandingBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600">Rate</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {loan.interestRate.toFixed(2)}%
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Expandable Details */}
+                  {isExpanded && loan.status === 'Active' && loan.type === 'taken' && (
+                    <div className="pt-3 border-t border-gray-200 slide-up">
+                      <div className="space-y-3 mb-3">
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Total Tenure</p>
+                          <p className="text-sm font-medium text-gray-900">{loan.tenure} months</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">EMIs Paid</p>
+                          <p className="text-sm font-medium text-gray-900">{progress.emisPaid} of {loan.tenure}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Interest Type</p>
+                          <p className="text-sm font-medium text-gray-900 capitalize">{loan.interestType}</p>
+                        </div>
+                      </div>
+
+                      {/* Early Closure Tips */}
+                      {tips.length > 0 && <EarlyClosureTips tips={tips} />}
+
+                      {/* Pre-Payment Simulator */}
+                      <PrepaymentSimulator
+                        loan={loan}
+                        currencySymbol={currencySymbol}
+                        onApply={handleApplyPrepayment}
+                      />
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap justify-end gap-2 pt-3 border-t border-gray-100">
+                    {loan.status === 'Active' && loan.type === 'taken' && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingEmiLoan(loan);
+                          }}
+                          className="text-sm text-brand-dark-purple hover:text-brand-purple font-medium min-h-[44px] px-3 py-2 border border-brand-yellow rounded-lg hover:bg-brand-yellow hover:bg-opacity-20 flex items-center"
+                          aria-label={`Edit EMI for ${loan.name}`}
+                        >
+                          Edit EMI
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingTenureLoan(loan);
+                          }}
+                          className="text-sm text-purple-600 hover:text-purple-700 font-medium min-h-[44px] px-3 py-2 border border-purple-200 rounded-lg hover:bg-purple-50 flex items-center"
+                          aria-label={`Edit tenure for ${loan.name}`}
+                        >
+                          Edit Tenure
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(loan);
+                      }}
+                      className="text-sm text-brand-purple hover:text-brand-dark-purple font-medium min-h-[44px] px-3 py-2 flex items-center"
+                      aria-label={`Edit ${loan.name} loan`}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(loan.id);
+                      }}
+                      className="text-sm text-brand-pink hover:text-pink-600 font-medium min-h-[44px] px-3 py-2 flex items-center"
+                      aria-label={`Delete ${loan.name} loan`}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <p className="text-xs text-gray-600">Principal</p>
-                    <p className="text-sm font-medium text-gray-900 text-money">
-                      {currencySymbol}
-                      {loan.principal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">EMI</p>
-                    <p className="text-sm font-medium status-loan text-money">
-                      {currencySymbol}
-                      {loan.emi.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Outstanding</p>
-                    <p className="text-sm font-medium text-gray-900 text-money">
-                      {currencySymbol}
-                      {loan.outstandingBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-600">Rate</p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {loan.interestRate.toFixed(2)}%
-                    </p>
-                  </div>
-                </div>
-                <div className="flex justify-end space-x-3 pt-3 border-t border-gray-100">
-                  <button
-                    onClick={() => handleEdit(loan)}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium min-h-[44px] min-w-[44px] flex items-center"
-                    aria-label={`Edit ${loan.name} loan`}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(loan.id)}
-                    className="text-sm text-red-600 hover:text-red-700 font-medium min-h-[44px] min-w-[44px] flex items-center"
-                    aria-label={`Delete ${loan.name} loan`}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* Desktop Table View */}
-          <div className="hidden sm:block card overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Principal
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    EMI
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Outstanding
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {loans.map((loan) => (
-                  <tr key={loan.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {loan.name}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {loan.type === 'taken' ? 'Taken' : 'Given'}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-money text-gray-900">
-                      {currencySymbol}
-                      {loan.principal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-money status-loan">
-                      {currencySymbol}
-                      {loan.emi.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-money text-gray-900">
-                      {currencySymbol}
-                      {loan.outstandingBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                          loan.status === 'Active'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {loan.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+          {/* Desktop Table View - Enhanced */}
+          <div className="hidden sm:block space-y-4">
+            {loans.map((loan) => {
+              const progress = calculateLoanProgress(loan);
+              const tips = loan.status === 'Active' && loan.type === 'taken' ? generateEarlyClosureTips(loan, currencySymbol) : [];
+              const badges = loan.status === 'Active' && loan.type === 'taken' ? getLoanBadges(loan) : [];
+              const isExpanded = expandedCards.has(loan.id);
+
+              return (
+                <div key={loan.id} className="card">
+                  {/* Main Loan Info Row */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="text-base font-semibold text-gray-900">{loan.name}</h3>
+                          {badges.map((badge, idx) => (
+                            <span
+                              key={idx}
+                              className={`px-2 py-0.5 text-xs font-semibold rounded-full ${badge.color}`}
+                            >
+                              {badge.label}
+                            </span>
+                          ))}
+                          <span
+                            className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
+                              loan.status === 'Active'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {loan.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          {loan.type === 'taken' ? 'Loan Taken' : 'Loan Given'} • {new Date(loan.startDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {loan.status === 'Active' && loan.type === 'taken' && (
+                        <div className="text-right">
+                          <p className="text-xs text-gray-600">EMIs Remaining</p>
+                          <p className="text-lg font-bold text-brand-purple">
+                            {progress.emisRemaining} / {loan.tenure}
+                          </p>
+                        </div>
+                      )}
                       <button
-                        onClick={() => handleEdit(loan)}
-                        className="text-blue-600 hover:text-blue-700 font-medium min-h-[44px] min-w-[44px]"
-                        aria-label={`Edit ${loan.name} loan`}
+                        onClick={() => toggleCardExpand(loan.id)}
+                        className="btn-icon text-gray-400 hover:text-gray-600"
+                        aria-label={isExpanded ? 'Collapse' : 'Expand'}
                       >
-                        Edit
+                        <Icon 
+                          name="ChevronDown" 
+                          size={20} 
+                          className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        />
                       </button>
-                      <button
-                        onClick={() => handleDelete(loan.id)}
-                        className="text-red-600 hover:text-red-700 font-medium min-h-[44px] min-w-[44px]"
-                        aria-label={`Delete ${loan.name} loan`}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+
+                  {/* Key Metrics Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Principal</p>
+                      <p className="text-sm font-semibold text-gray-900 text-money">
+                        {currencySymbol}
+                        {loan.principal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">EMI</p>
+                      <p className="text-sm font-semibold status-loan text-money">
+                        {currencySymbol}
+                        {loan.emi.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                    {loan.status === 'Active' && loan.type === 'taken' && (
+                      <>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Outstanding</p>
+                          <p className="text-sm font-semibold text-gray-900 text-money">
+                            {currencySymbol}
+                            {loan.outstandingBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Interest Rate</p>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {loan.interestRate.toFixed(2)}%
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Remaining EMIs Info */}
+                  {loan.status === 'Active' && loan.type === 'taken' && (
+                    <>
+                      <RemainingEmiInfo progress={progress} currencySymbol={currencySymbol} />
+                      <LoanProgressBar progress={progress} loanName={loan.name} />
+                    </>
+                  )}
+
+                  {/* Expandable Details */}
+                  {isExpanded && loan.status === 'Active' && loan.type === 'taken' && (
+                    <div className="pt-4 border-t border-gray-200 slide-up">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Total Tenure</p>
+                          <p className="text-sm font-medium text-gray-900">{loan.tenure} months</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">EMIs Paid</p>
+                          <p className="text-sm font-medium text-gray-900">{progress.emisPaid}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Interest Type</p>
+                          <p className="text-sm font-medium text-gray-900 capitalize">{loan.interestType}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Progress</p>
+                          <p className="text-sm font-medium text-gray-900">{progress.progressPercentage.toFixed(1)}%</p>
+                        </div>
+                      </div>
+
+                      {/* Early Closure Tips */}
+                      {tips.length > 0 && <EarlyClosureTips tips={tips} />}
+
+                      {/* Pre-Payment Simulator */}
+                      <PrepaymentSimulator
+                        loan={loan}
+                        currencySymbol={currencySymbol}
+                        onApply={handleApplyPrepayment}
+                      />
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-gray-200">
+                    {loan.status === 'Active' && loan.type === 'taken' && (
+                      <>
+                        <button
+                          onClick={() => setEditingEmiLoan(loan)}
+                          className="text-sm text-brand-dark-purple hover:text-brand-purple font-medium min-h-[44px] px-3 py-2 border border-brand-yellow rounded-lg hover:bg-brand-yellow hover:bg-opacity-20"
+                          aria-label={`Edit EMI for ${loan.name}`}
+                        >
+                          Edit EMI
+                        </button>
+                        <button
+                          onClick={() => setEditingTenureLoan(loan)}
+                          className="text-sm text-purple-600 hover:text-purple-700 font-medium min-h-[44px] px-3 py-2 border border-purple-200 rounded-lg hover:bg-purple-50"
+                          aria-label={`Edit tenure for ${loan.name}`}
+                        >
+                          Edit Tenure
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => handleEdit(loan)}
+                      className="text-sm text-brand-purple hover:text-brand-dark-purple font-medium min-h-[44px] px-3 py-2"
+                      aria-label={`Edit ${loan.name} loan`}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDelete(loan.id)}
+                      className="text-sm text-brand-pink hover:text-pink-600 font-medium min-h-[44px] px-3 py-2"
+                      aria-label={`Delete ${loan.name} loan`}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </>
       )}

@@ -3,6 +3,7 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { loadIncomes, saveIncome, deleteIncome } from '../store/slices/incomeSlice';
 import type { Income, IncomeType } from '../types';
 import Modal from './Modal';
+import { Icon } from './common/Icon';
 
 const IncomeModule = () => {
   const dispatch = useAppDispatch();
@@ -270,7 +271,7 @@ const IncomeModule = () => {
       {incomes.length === 0 ? (
         <div className="card">
           <div className="empty-state">
-            <div className="empty-state-icon">💰</div>
+            <Icon name="TrendingUp" size={48} className="text-gray-400 opacity-50" />
             <p className="empty-state-text mb-2">No income records yet</p>
             <button onClick={() => setShowForm(true)} className="btn-primary mt-4">
               Add Your First Income

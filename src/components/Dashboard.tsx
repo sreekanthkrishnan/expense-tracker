@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useAppSelector } from '../store/hooks';
+import { Icon } from './common/Icon';
 import {
   LineChart,
   Line,
@@ -22,6 +23,71 @@ const Dashboard = () => {
   const { expenses } = useAppSelector((state) => state.expense);
   const { loans } = useAppSelector((state) => state.loan);
   const { goals } = useAppSelector((state) => state.savingsGoal);
+
+  // Get theme colors from CSS variables (updates when theme changes)
+  const [themeColors, setThemeColors] = useState({
+    income: '#FFCC00',
+    expense: '#FF018F',
+    savings: '#FFCC00',
+    primary: '#FFCC00',
+    active: '#2D0C62',
+    warning: '#FF018F',
+  });
+
+  // Update theme colors when CSS variables change (optimized)
+  useEffect(() => {
+    const updateThemeColors = () => {
+      const root = getComputedStyle(document.documentElement);
+      const newColors = {
+        income: root.getPropertyValue('--color-income').trim() || '#FFCC00',
+        expense: root.getPropertyValue('--color-expense').trim() || '#FF018F',
+        savings: root.getPropertyValue('--color-savings').trim() || '#FFCC00',
+        primary: root.getPropertyValue('--color-primary').trim() || '#FFCC00',
+        active: root.getPropertyValue('--color-active').trim() || '#2D0C62',
+        warning: root.getPropertyValue('--color-warning').trim() || '#FF018F',
+      };
+      
+      // Only update if colors actually changed
+      setThemeColors((prev) => {
+        if (
+          prev.income === newColors.income &&
+          prev.expense === newColors.expense &&
+          prev.savings === newColors.savings &&
+          prev.primary === newColors.primary &&
+          prev.active === newColors.active &&
+          prev.warning === newColors.warning
+        ) {
+          return prev; // No change, return previous to prevent re-render
+        }
+        return newColors;
+      });
+    };
+
+    // Initial load
+    updateThemeColors();
+
+    // Listen for theme changes via MutationObserver (only on style attribute changes)
+    const observer = new MutationObserver((mutations) => {
+      // Only update if style attribute actually changed
+      const hasStyleChange = mutations.some(
+        (mutation) => mutation.type === 'attributes' && mutation.attributeName === 'style'
+      );
+      if (hasStyleChange) {
+        // Debounce to avoid rapid updates
+        setTimeout(updateThemeColors, 100);
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['style'],
+      subtree: false,
+    });
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   const currency = profile?.currency || 'USD';
   const currencySymbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'INR' ? '₹' : currency;
@@ -130,7 +196,15 @@ const Dashboard = () => {
     return months;
   }, [incomes, expenses, currentMonth, currentYear]);
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+  // Chart colors using theme colors (theme-aware) - memoized to prevent recalculation
+  const CHART_COLORS = useMemo(() => [
+    themeColors.income,
+    themeColors.expense,
+    themeColors.active,
+    themeColors.primary,
+    themeColors.savings,
+    themeColors.warning,
+  ], [themeColors.income, themeColors.expense, themeColors.active, themeColors.primary, themeColors.savings, themeColors.warning]);
 
   // Savings goals progress
   const goalsProgress = useMemo(() => {
@@ -197,9 +271,9 @@ const Dashboard = () => {
                   contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
                 />
                 <Legend wrapperStyle={{ fontSize: '12px' }} />
-                <Line type="monotone" dataKey="income" stroke="#22c55e" strokeWidth={2.5} name="Income" dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2.5} name="Expenses" dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="savings" stroke="#3b82f6" strokeWidth={2.5} name="Savings" dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="income" stroke={themeColors.income} strokeWidth={2.5} name="Income" dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="expenses" stroke={themeColors.expense} strokeWidth={2.5} name="Expenses" dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="savings" stroke={themeColors.savings} strokeWidth={2.5} name="Savings" dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -220,12 +294,15 @@ const Dashboard = () => {
                     label={({ name, percent }) => percent !== undefined && percent > 0.05 ? `${name} ${(percent * 100).toFixed(0)}%` : ''}
                     outerRadius={70}
                     innerRadius={30}
-                    fill="#8884d8"
+                    fill={themeColors.primary}
                     dataKey="value"
                     paddingAngle={2}
+                    isAnimationActive={true}
+                    animationBegin={0}
+                    animationDuration={400}
                   >
                     {categoryData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip 
@@ -237,7 +314,7 @@ const Dashboard = () => {
             </div>
           ) : (
             <div className="empty-state" style={{ height: '280px' }}>
-              <div className="empty-state-icon">📊</div>
+              <Icon name="BarChart2" size={48} className="text-gray-400 opacity-50" />
               <p className="empty-state-text">No expenses this month</p>
             </div>
           )}
@@ -261,8 +338,11 @@ const Dashboard = () => {
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                   <div
-                    className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
-                    style={{ width: `${Math.min(100, Math.max(0, goal.progress))}%` }}
+                    className="h-3 rounded-full transition-all duration-500 ease-out"
+                    style={{ 
+                      width: `${Math.min(100, Math.max(0, goal.progress))}%`,
+                      backgroundColor: 'var(--color-savings)'
+                    }}
                     role="progressbar"
                     aria-valuenow={goal.progress}
                     aria-valuemin={0}
@@ -290,7 +370,7 @@ const Dashboard = () => {
                   formatter={(value: number | undefined) => value !== undefined ? `${currencySymbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''}
                   contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
                 />
-                <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="value" fill={themeColors.expense} radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

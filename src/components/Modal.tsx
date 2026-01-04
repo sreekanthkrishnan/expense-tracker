@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Icon } from './common/Icon';
 
 interface ModalProps {
   isOpen: boolean;
@@ -73,19 +74,7 @@ const Modal = ({ isOpen, onClose, title, children, size = 'md' }: ModalProps) =>
               className="btn-icon text-gray-400 hover:text-gray-600"
               aria-label="Close modal"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <Icon name="X" size={20} />
             </button>
           </div>
 

@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { updateProfile, loadProfile } from '../store/slices/profileSlice';
+import { useTheme } from '../hooks/useTheme';
+import { Icon } from './common/Icon';
 import type { Profile as ProfileType, RiskLevel } from '../types';
+import type { ThemeKey } from '../theme/themes';
 
 const Profile = () => {
   const dispatch = useAppDispatch();
   const { profile, loading } = useAppSelector((state) => state.profile);
+  const { currentThemeKey, setTheme, availableThemes } = useTheme();
   const [formData, setFormData] = useState<ProfileType>({
     id: 'default',
     name: '',
@@ -143,10 +147,7 @@ const Profile = () => {
               >
                 {loading ? (
                   <span className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
+                    <Icon name="Loader" size={16} className="animate-spin -ml-1 mr-2 text-white" />
                     Saving...
                   </span>
                 ) : (
@@ -155,6 +156,69 @@ const Profile = () => {
               </button>
             </div>
           </form>
+        </div>
+
+        {/* Theme Settings */}
+        <div className="card mt-6">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Theme Settings</h3>
+            <p className="text-sm text-gray-600">Choose your preferred color theme</p>
+          </div>
+
+          <div className="space-y-3">
+            {Object.entries(availableThemes).map(([key, theme]) => (
+              <label
+                key={key}
+                className={`flex items-center p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  currentThemeKey === key
+                    ? 'border-yellow-400 bg-yellow-50'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="theme"
+                  value={key}
+                  checked={currentThemeKey === key}
+                  onChange={() => setTheme(key as ThemeKey)}
+                  className="mr-3"
+                  aria-label={`Select ${theme.name}`}
+                />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-gray-900">{theme.name}</span>
+                    {currentThemeKey === key && (
+                      <span className="text-xs text-yellow-600 font-medium">Active</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <div
+                      className="w-6 h-6 rounded-full border border-gray-300"
+                      style={{ backgroundColor: theme.colors.primary }}
+                      aria-hidden="true"
+                    />
+                    <div
+                      className="w-6 h-6 rounded-full border border-gray-300"
+                      style={{ backgroundColor: theme.colors.secondary }}
+                      aria-hidden="true"
+                    />
+                    <div
+                      className="w-6 h-6 rounded-full border border-gray-300"
+                      style={{ backgroundColor: theme.colors.accent }}
+                      aria-hidden="true"
+                    />
+                    <span className="text-xs text-gray-500 ml-2">Preview colors</span>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-xs text-blue-800">
+              <strong>Note:</strong> The app background is always white. Themes affect cards, accents, buttons, and highlights only.
+            </p>
+          </div>
         </div>
       </div>
     </div>
