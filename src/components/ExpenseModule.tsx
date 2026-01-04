@@ -4,6 +4,7 @@ import { loadExpenses, saveExpense, deleteExpense, addCategory } from '../store/
 import type { Expense } from '../types';
 import Modal from './Modal';
 import { Icon } from './common/Icon';
+import BankStatementImport from './BankStatementImport';
 import {
   BarChart,
   Bar,
@@ -134,13 +135,16 @@ const ExpenseModule = () => {
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">Expenses</h2>
           <p className="text-sm text-gray-600">Track your spending</p>
         </div>
-        <button
-          onClick={() => setShowForm(true)}
-          className="btn-primary w-full sm:w-auto"
-          aria-label="Add new expense"
-        >
-          <span className="mr-2">+</span> Add Expense
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <BankStatementImport />
+          <button
+            onClick={() => setShowForm(true)}
+            className="btn-primary w-full sm:w-auto"
+            aria-label="Add new expense"
+          >
+            <span className="mr-2">+</span> Add Expense
+          </button>
+        </div>
       </div>
 
       {/* Summary Card */}
