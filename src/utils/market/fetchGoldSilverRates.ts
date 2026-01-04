@@ -148,10 +148,12 @@ const fetchFromGoldAPI = async (currency: string = 'INR'): Promise<GoldSilverRat
     let exchangeRate = 1; // Default for USD
     if (currencyUpper !== 'USD') {
       const rate = await getUSDToCurrencyRate(currencyUpper);
-      if (!rate) {
+      if (!rate || rate <= 0) {
+        console.error(`Failed to get exchange rate for ${currencyUpper}. Rate: ${rate}`);
         throw new Error(`Failed to get exchange rate for ${currencyUpper}`);
       }
       exchangeRate = rate;
+      console.log(`Exchange rate USD to ${currencyUpper}: ${exchangeRate}`);
     }
 
     // Convert USD per ounce to target currency per ounce
@@ -161,12 +163,14 @@ const fetchFromGoldAPI = async (currency: string = 'INR'): Promise<GoldSilverRat
     // This is the ONLY place we convert ounce to gram
     const gold24KPerGram = goldPerOunceInTargetCurrency / GRAMS_PER_TROY_OUNCE;
 
+    console.log(`Gold calculation: USD ${goldUSDPerOunce}/oz × ${exchangeRate} = ${goldPerOunceInTargetCurrency} ${currencyUpper}/oz ÷ ${GRAMS_PER_TROY_OUNCE} = ${gold24KPerGram} ${currencyUpper}/gram`);
+
     // Sanity check: Returns false if price seems incorrect
     const sanityCheckPassed = sanityCheckGoldPrice(gold24KPerGram, currencyUpper);
     
     // If sanity check failed, don't return data (return null to trigger fallback)
     if (!sanityCheckPassed) {
-      console.error('Sanity check failed for gold price. Skipping this data source.');
+      console.error(`Sanity check failed for gold price: ${gold24KPerGram} ${currencyUpper}/gram. Skipping this data source.`);
       return null;
     }
 
@@ -212,7 +216,10 @@ const fetchFromGoldAPI = async (currency: string = 'INR'): Promise<GoldSilverRat
       currency: currencyUpper,
     };
   } catch (error) {
-    console.warn('Failed to fetch from GoldAPI:', error);
+    console.error('Failed to fetch from GoldAPI:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', error.message);
+    }
     return null;
   }
 };

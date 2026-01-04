@@ -28,9 +28,21 @@ const MarketRates = () => {
 
     try {
       const data = await fetchGoldSilverRates(currency, forceRefresh);
+      
+      // Check if we got valid data
+      if (!data || !data.gold24K || data.gold24K.perGram === 0) {
+        throw new Error('Failed to fetch valid gold prices. Please check your internet connection and try again.');
+      }
+      
+      // Check if sanity check failed
+      if (data.sanityCheckFailed) {
+        setError('Price validation failed. The calculated gold price appears incorrect. Please try refreshing.');
+      }
+      
       setRates(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch market rates');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch market rates';
+      setError(errorMessage);
       console.error('Error fetching market rates:', err);
     } finally {
       setLoading(false);

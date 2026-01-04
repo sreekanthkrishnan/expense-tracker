@@ -10,6 +10,7 @@
 /**
  * Fetch exchange rate from USD to target currency
  * Uses exchangerate-api.com (free tier, no API key required)
+ * Falls back to alternative APIs if primary fails
  */
 export const getUSDToCurrencyRate = async (targetCurrency: string): Promise<number | null> => {
   try {
@@ -20,23 +21,53 @@ export const getUSDToCurrencyRate = async (targetCurrency: string): Promise<numb
       return 1;
     }
 
-    // Fetch exchange rate from free API
-    // Using exchangerate-api.com (free tier, 1500 requests/month)
-    const response = await fetch(`https://api.exchangerate-api.com/v4/latest/USD`);
-    
-    if (!response.ok) {
-      throw new Error(`Exchange rate API returned ${response.status}`);
-    }
+    // Try primary API: exchangerate-api.com
+    try {
+      const response = await fetch(`https://api.exchangerate-api.com/v4/latest/USD`);
+      
+      if (!response.ok) {
+        throw new Error(`Exchange rate API returned ${response.status}`);
+      }
 
-    const data = await response.json();
-    
-    if (!data.rates || !data.rates[currencyUpper]) {
-      throw new Error(`Exchange rate not found for ${currencyUpper}`);
-    }
+      const data = await response.json();
+      
+      if (!data.rates || !data.rates[currencyUpper]) {
+        throw new Error(`Exchange rate not found for ${currencyUpper}`);
+      }
 
-    return data.rates[currencyUpper];
+      return data.rates[currencyUpper];
+    } catch (primaryError) {
+      console.warn('Primary exchange rate API failed, trying fallback:', primaryError);
+      
+      // Fallback: Try alternative API (fixer.io free tier or exchangerate.host)
+      try {
+        const fallbackResponse = await fetch(`https://api.exchangerate.host/latest?base=USD&symbols=${currencyUpper}`);
+        
+        if (!fallbackResponse.ok) {
+          throw new Error(`Fallback exchange rate API returned ${fallbackResponse.status}`);
+        }
+
+        const fallbackData = await fallbackResponse.json();
+        
+        if (fallbackData.success && fallbackData.rates && fallbackData.rates[currencyUpper]) {
+          return fallbackData.rates[currencyUpper];
+        }
+        
+        throw new Error(`Exchange rate not found in fallback API for ${currencyUpper}`);
+      } catch (fallbackError) {
+        console.warn('Fallback exchange rate API also failed:', fallbackError);
+        
+        // Last resort: Use approximate rate for INR (can be updated manually)
+        if (currencyUpper === 'INR') {
+          console.warn('Using approximate INR rate: 83.0 (fallback)');
+          return 83.0; // Approximate fallback rate
+        }
+        
+        throw fallbackError;
+      }
+    }
   } catch (error) {
-    console.warn('Failed to fetch exchange rate:', error);
+    console.error('All exchange rate APIs failed:', error);
     return null;
   }
 };
