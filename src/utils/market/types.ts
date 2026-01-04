@@ -5,7 +5,11 @@
  */
 
 export interface GoldSilverRates {
-  gold: {
+  gold24K: {
+    perGram: number;
+    per8Gram: number;
+  };
+  gold22K: {
     perGram: number;
     per8Gram: number;
   };
@@ -15,6 +19,38 @@ export interface GoldSilverRates {
   };
   fetchedAt: string; // ISO timestamp
   currency: string;
+  sanityCheckFailed?: boolean; // True if price validation failed
+}
+
+// Legacy interface for backward compatibility
+export interface LegacyGoldSilverRates {
+  gold: {
+    perGram: number;
+    per8Gram: number;
+  };
+  silver: {
+    perGram: number;
+    per8Gram: number;
+  };
+  fetchedAt: string;
+  currency: string;
+}
+
+export interface HistoricalPricePoint {
+  date: string; // ISO date string
+  gold24K: number;
+  gold22K: number;
+  silver: number;
+}
+
+export interface MetalHistory {
+  metal: 'gold24K' | 'gold22K' | 'silver';
+  data: Array<{
+    date: string;
+    price: number;
+  }>;
+  currency: string;
+  fetchedAt: string;
 }
 
 export interface MutualFundData {

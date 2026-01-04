@@ -9,6 +9,46 @@
 
 import type { GoldSilverRates } from './types';
 import { getCachedMarketData, cacheGoldSilverRates, isCacheFresh } from './cacheMarketData';
+import { calculate22KFrom24K, calculate8GramPrice } from './calculateCaratRates';
+import { getUSDToCurrencyRate, sanityCheckGoldPrice } from './getExchangeRate';
+
+const GRAMS_PER_TROY_OUNCE = 31.1035;
+
+/**
+ * Convert legacy cached data format to new format
+ * Handles backward compatibility with old cache structure
+ */
+const migrateLegacyRates = (legacy: any): GoldSilverRates | null => {
+  // Check if it's the old format (has 'gold' instead of 'gold24K')
+  if (legacy && legacy.gold && !legacy.gold24K) {
+    const gold24KPerGram = legacy.gold.perGram || 0;
+    const gold22KPerGram = calculate22KFrom24K(gold24KPerGram);
+    
+    return {
+      gold24K: {
+        perGram: gold24KPerGram,
+        per8Gram: legacy.gold.per8Gram || calculate8GramPrice(gold24KPerGram),
+      },
+      gold22K: {
+        perGram: gold22KPerGram,
+        per8Gram: calculate8GramPrice(gold22KPerGram),
+      },
+      silver: {
+        perGram: legacy.silver?.perGram || 0,
+        per8Gram: legacy.silver?.per8Gram || 0,
+      },
+      fetchedAt: legacy.fetchedAt || new Date().toISOString(),
+      currency: legacy.currency || 'INR',
+    };
+  }
+  
+  // Check if it's already in the new format
+  if (legacy && legacy.gold24K && legacy.gold22K) {
+    return legacy as GoldSilverRates;
+  }
+  
+  return null;
+};
 
 /**
  * Fetch rates from Metals.live API (free tier, no API key required)
@@ -28,21 +68,28 @@ const fetchFromMetalsAPI = async (currency: string = 'INR'): Promise<GoldSilverR
     
     // Parse response (adjust based on actual API response structure)
     // This is a placeholder - actual API structure may vary
-    const goldPerGram = data.gold?.price || 0;
+    const gold24KPerGram = data.gold?.price || 0;
     const silverPerGram = data.silver?.price || 0;
 
-    if (goldPerGram === 0 || silverPerGram === 0) {
+    if (gold24KPerGram === 0 || silverPerGram === 0) {
       throw new Error('Invalid data from API');
     }
 
+    // Calculate 22K from 24K
+    const gold22KPerGram = calculate22KFrom24K(gold24KPerGram);
+
     return {
-      gold: {
-        perGram: goldPerGram,
-        per8Gram: goldPerGram * 8,
+      gold24K: {
+        perGram: gold24KPerGram,
+        per8Gram: calculate8GramPrice(gold24KPerGram),
+      },
+      gold22K: {
+        perGram: gold22KPerGram,
+        per8Gram: calculate8GramPrice(gold22KPerGram),
       },
       silver: {
         perGram: silverPerGram,
-        per8Gram: silverPerGram * 8,
+        per8Gram: calculate8GramPrice(silverPerGram),
       },
       fetchedAt: new Date().toISOString(),
       currency,
@@ -57,8 +104,14 @@ const fetchFromMetalsAPI = async (currency: string = 'INR'): Promise<GoldSilverR
  * Fetch rates from GoldAPI.io
  * API Documentation: https://www.goldapi.io/
  * 
- * Supports: XAU (Gold), XAG (Silver)
- * Currency codes: USD, EUR, GBP, INR, etc. (uppercase)
+ * RULES:
+ * 1. API base unit = USD per troy ounce
+ * 2. Convert currency ONLY once (USD → target currency)
+ * 3. Convert ounce → gram using 31.1035
+ * 4. 24K only for calculations
+ * 5. 22K = 24K × 0.916 (display only)
+ * 6. No GST, making charges, or premiums
+ * 7. Sanity check: if price > ₹10,000 → log error
  */
 const fetchFromGoldAPI = async (currency: string = 'INR'): Promise<GoldSilverRates | null> => {
   try {
@@ -69,69 +122,91 @@ const fetchFromGoldAPI = async (currency: string = 'INR'): Promise<GoldSilverRat
       return null; // No API key available
     }
 
-    // Convert currency to uppercase (API requires uppercase)
     const currencyUpper = currency.toUpperCase();
 
-    // Fetch gold (XAU)
-    const goldResponse = await fetch(`https://www.goldapi.io/api/XAU/${currencyUpper}`, {
+    // STEP 1: Fetch gold price in USD per troy ounce (base unit)
+    const goldUSDResponse = await fetch(`https://www.goldapi.io/api/XAU/USD`, {
       headers: {
         'x-access-token': apiKey,
       },
     });
 
-    if (!goldResponse.ok) {
-      throw new Error(`GoldAPI gold returned ${goldResponse.status}`);
+    if (!goldUSDResponse.ok) {
+      throw new Error(`GoldAPI USD returned ${goldUSDResponse.status}`);
     }
 
-    const goldData = await goldResponse.json();
+    const goldUSDData = await goldUSDResponse.json();
     
-    // GoldAPI provides price_gram_24k directly, or we can calculate from price (per ounce)
-    let goldPerGram = 0;
-    if (goldData.price_gram_24k) {
-      goldPerGram = goldData.price_gram_24k;
-    } else if (goldData.price) {
-      // Convert from per ounce to per gram (1 ounce = 31.1035 grams)
-      goldPerGram = goldData.price / 31.1035;
-    }
-
-    if (goldPerGram === 0) {
+    // Get price in USD per troy ounce
+    const goldUSDPerOunce = goldUSDData.price || 0;
+    
+    if (goldUSDPerOunce === 0) {
       throw new Error('Invalid gold price from API');
     }
 
-    // Fetch silver (XAG)
-    const silverResponse = await fetch(`https://www.goldapi.io/api/XAG/${currencyUpper}`, {
+    // STEP 2: Convert currency ONLY once (USD → target currency)
+    let exchangeRate = 1; // Default for USD
+    if (currencyUpper !== 'USD') {
+      const rate = await getUSDToCurrencyRate(currencyUpper);
+      if (!rate) {
+        throw new Error(`Failed to get exchange rate for ${currencyUpper}`);
+      }
+      exchangeRate = rate;
+    }
+
+    // Convert USD per ounce to target currency per ounce
+    const goldPerOunceInTargetCurrency = goldUSDPerOunce * exchangeRate;
+
+    // STEP 3: Convert ounce → gram using 31.1035
+    // This is the ONLY place we convert ounce to gram
+    const gold24KPerGram = goldPerOunceInTargetCurrency / GRAMS_PER_TROY_OUNCE;
+
+    // Sanity check: Returns false if price seems incorrect
+    const sanityCheckPassed = sanityCheckGoldPrice(gold24KPerGram, currencyUpper);
+    
+    // If sanity check failed, don't return data (return null to trigger fallback)
+    if (!sanityCheckPassed) {
+      console.error('Sanity check failed for gold price. Skipping this data source.');
+      return null;
+    }
+
+    // Fetch silver (same process)
+    const silverUSDResponse = await fetch(`https://www.goldapi.io/api/XAG/USD`, {
       headers: {
         'x-access-token': apiKey,
       },
     });
 
-    if (!silverResponse.ok) {
-      throw new Error(`GoldAPI silver returned ${silverResponse.status}`);
+    if (!silverUSDResponse.ok) {
+      throw new Error(`GoldAPI silver USD returned ${silverUSDResponse.status}`);
     }
 
-    const silverData = await silverResponse.json();
-    
-    // Silver price calculation
-    let silverPerGram = 0;
-    if (silverData.price_gram_24k) {
-      silverPerGram = silverData.price_gram_24k;
-    } else if (silverData.price) {
-      // Convert from per ounce to per gram
-      silverPerGram = silverData.price / 31.1035;
-    }
+    const silverUSDData = await silverUSDResponse.json();
+    const silverUSDPerOunce = silverUSDData.price || 0;
 
-    if (silverPerGram === 0) {
+    if (silverUSDPerOunce === 0) {
       throw new Error('Invalid silver price from API');
     }
 
+    // Convert silver: USD → target currency → gram
+    const silverPerOunceInTargetCurrency = silverUSDPerOunce * exchangeRate;
+    const silverPerGram = silverPerOunceInTargetCurrency / GRAMS_PER_TROY_OUNCE;
+
+    // STEP 4: Calculate 22K from 24K (display only, not used in calculations)
+    const gold22KPerGram = calculate22KFrom24K(gold24KPerGram);
+
     return {
-      gold: {
-        perGram: goldPerGram,
-        per8Gram: goldPerGram * 8,
+      gold24K: {
+        perGram: gold24KPerGram,
+        per8Gram: calculate8GramPrice(gold24KPerGram),
+      },
+      gold22K: {
+        perGram: gold22KPerGram,
+        per8Gram: calculate8GramPrice(gold22KPerGram),
       },
       silver: {
         perGram: silverPerGram,
-        per8Gram: silverPerGram * 8,
+        per8Gram: calculate8GramPrice(silverPerGram),
       },
       fetchedAt: new Date().toISOString(),
       currency: currencyUpper,
@@ -169,8 +244,20 @@ export const fetchGoldSilverRates = async (
   // Check cache first if not forcing refresh
   if (!forceRefresh) {
     const cached = await getCachedMarketData();
-    if (cached?.goldSilver && isCacheFresh(cached)) {
-      return cached.goldSilver;
+    if (cached?.goldSilver) {
+      // Try to migrate legacy format if needed
+      const migrated = migrateLegacyRates(cached.goldSilver);
+      if (migrated && isCacheFresh(cached)) {
+        // Update cache with new format
+        await cacheGoldSilverRates(migrated);
+        return migrated;
+      } else if (migrated) {
+        // Return migrated data even if cache is stale
+        return migrated;
+      } else if (cached.goldSilver.gold24K && cached.goldSilver.gold22K && isCacheFresh(cached)) {
+        // Already in new format and fresh
+        return cached.goldSilver as GoldSilverRates;
+      }
     }
   }
 
@@ -194,13 +281,26 @@ export const fetchGoldSilverRates = async (
   if (!rates) {
     const cached = await getCachedMarketData();
     if (cached?.goldSilver) {
-      return cached.goldSilver;
+      // Try to migrate legacy format if needed
+      const migrated = migrateLegacyRates(cached.goldSilver);
+      if (migrated) {
+        // Update cache with new format
+        await cacheGoldSilverRates(migrated);
+        return migrated;
+      } else if (cached.goldSilver.gold24K && cached.goldSilver.gold22K) {
+        // Already in new format
+        return cached.goldSilver as GoldSilverRates;
+      }
     }
 
     // Last resort: Return default values with a warning
     console.warn('Unable to fetch gold/silver rates. Using default values.');
     return {
-      gold: {
+      gold24K: {
+        perGram: 0,
+        per8Gram: 0,
+      },
+      gold22K: {
         perGram: 0,
         per8Gram: 0,
       },
@@ -211,6 +311,13 @@ export const fetchGoldSilverRates = async (
       fetchedAt: new Date().toISOString(),
       currency,
     };
+  }
+
+  // Perform sanity check on final rates and set flag
+  const goldPrice = rates.gold24K?.perGram || 0;
+  if (goldPrice > 0) {
+    const sanityCheckPassed = sanityCheckGoldPrice(goldPrice, rates.currency);
+    rates.sanityCheckFailed = !sanityCheckPassed;
   }
 
   // Cache the fetched rates

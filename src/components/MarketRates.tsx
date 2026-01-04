@@ -1,7 +1,7 @@
 /**
  * Market Rates Component
  * 
- * Displays live gold and silver rates (1g and 8g).
+ * Displays live gold (24K/22K) and silver rates.
  * Fetches data on mount and allows manual refresh.
  * Shows cached data when offline.
  */
@@ -9,6 +9,7 @@
 import { useState, useEffect } from 'react';
 import { fetchGoldSilverRates } from '../utils/market/fetchGoldSilverRates';
 import type { GoldSilverRates } from '../utils/market/types';
+import { formatMetalPrice } from '../utils/market/calculateCaratRates';
 import { Icon } from './common/Icon';
 import { useAppSelector } from '../store/hooks';
 
@@ -39,14 +40,6 @@ const MarketRates = () => {
   useEffect(() => {
     loadRates();
   }, [currency]);
-
-  const formatPrice = (price: number): string => {
-    if (price === 0) return 'N/A';
-    return price.toLocaleString('en-US', { 
-      minimumFractionDigits: 2, 
-      maximumFractionDigits: 2 
-    });
-  };
 
   const formatDate = (dateString: string): string => {
     try {
@@ -105,56 +98,77 @@ const MarketRates = () => {
         </div>
       )}
 
-      {rates && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* Gold Card */}
-          <div className="p-4 rounded-lg border-2 border-yellow-200 bg-yellow-50">
-            <div className="flex items-center mb-3">
-              <span className="text-2xl mr-2">🟨</span>
-              <h4 className="text-base font-semibold text-gray-900">Gold</h4>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">1 gram</span>
-                <span className="text-lg font-bold text-gray-900">
-                  {currencySymbol}
-                  {formatPrice(rates.gold.perGram)}
-                </span>
+      {rates && rates.gold24K && rates.gold22K && rates.silver && (
+        <>
+          {/* Price Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            {/* Gold 24K Card */}
+            <div className="p-4 rounded-lg border-2 border-yellow-200 bg-yellow-50">
+              <div className="flex items-center mb-3">
+                <span className="text-2xl mr-2">🟨</span>
+                <h4 className="text-base font-semibold text-gray-900">Gold 24K</h4>
               </div>
-              <div className="flex justify-between items-center pt-2 border-t border-yellow-300">
-                <span className="text-sm text-gray-600">8 grams</span>
-                <span className="text-lg font-bold text-gray-900">
-                  {currencySymbol}
-                  {formatPrice(rates.gold.per8Gram)}
-                </span>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">1 gram</span>
+                  <span className="text-lg font-bold text-gray-900">
+                    {formatMetalPrice(rates.gold24K?.perGram || 0, currencySymbol)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-yellow-300">
+                  <span className="text-sm text-gray-600">8 grams</span>
+                  <span className="text-lg font-bold text-gray-900">
+                    {formatMetalPrice(rates.gold24K?.per8Gram || 0, currencySymbol)}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Silver Card */}
-          <div className="p-4 rounded-lg border-2 border-gray-300 bg-gray-50">
-            <div className="flex items-center mb-3">
-              <span className="text-2xl mr-2">⚪</span>
-              <h4 className="text-base font-semibold text-gray-900">Silver</h4>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">1 gram</span>
-                <span className="text-lg font-bold text-gray-900">
-                  {currencySymbol}
-                  {formatPrice(rates.silver.perGram)}
-                </span>
+            {/* Gold 22K Card */}
+            <div className="p-4 rounded-lg border-2 border-yellow-300 bg-yellow-100">
+              <div className="flex items-center mb-3">
+                <span className="text-2xl mr-2">🟨</span>
+                <h4 className="text-base font-semibold text-gray-900">Gold 22K</h4>
               </div>
-              <div className="flex justify-between items-center pt-2 border-t border-gray-300">
-                <span className="text-sm text-gray-600">8 grams</span>
-                <span className="text-lg font-bold text-gray-900">
-                  {currencySymbol}
-                  {formatPrice(rates.silver.per8Gram)}
-                </span>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">1 gram</span>
+                  <span className="text-lg font-bold text-gray-900">
+                    {formatMetalPrice(rates.gold22K?.perGram || 0, currencySymbol)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-yellow-300">
+                  <span className="text-sm text-gray-600">8 grams</span>
+                  <span className="text-lg font-bold text-gray-900">
+                    {formatMetalPrice(rates.gold22K?.per8Gram || 0, currencySymbol)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Silver Card */}
+            <div className="p-4 rounded-lg border-2 border-gray-300 bg-gray-50">
+              <div className="flex items-center mb-3">
+                <span className="text-2xl mr-2">⚪</span>
+                <h4 className="text-base font-semibold text-gray-900">Silver</h4>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">1 gram</span>
+                  <span className="text-lg font-bold text-gray-900">
+                    {formatMetalPrice(rates.silver?.perGram || 0, currencySymbol)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-gray-300">
+                  <span className="text-sm text-gray-600">8 grams</span>
+                  <span className="text-lg font-bold text-gray-900">
+                    {formatMetalPrice(rates.silver?.per8Gram || 0, currencySymbol)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {!loading && !rates && !error && (
@@ -168,8 +182,8 @@ const MarketRates = () => {
         <p className="text-xs text-gray-600 flex items-start">
           <Icon name="Info" size={14} className="mr-2 mt-0.5 flex-shrink-0" />
           <span>
+            <strong>Disclaimer:</strong> Market prices are indicative. Rates may vary by jeweller and location.
             Rates are fetched from public market APIs and cached locally for offline access.
-            Prices may vary slightly from actual market rates.
           </span>
         </p>
       </div>
