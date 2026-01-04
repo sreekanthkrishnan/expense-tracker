@@ -28,6 +28,10 @@ import {
   UploadOutlined,
   LockOutlined,
   InfoCircleOutlined,
+  DashboardOutlined,
+  MenuOutlined,
+  PlusOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 
 // Icon name mapping from old names to Ant Design icons
@@ -38,8 +42,10 @@ const iconMap: Record<string, React.ComponentType<any>> = {
   TrendingDown: ArrowDownOutlined,
   CreditCard: CreditCardOutlined,
   DollarSign: DollarOutlined,
+  Dollar: DollarOutlined,
   MessageCircle: MessageOutlined,
   X: CloseOutlined,
+  Close: CloseOutlined,
   ChevronDown: DownOutlined,
   AlertTriangle: WarningOutlined,
   CheckCircle: CheckCircleOutlined,
@@ -48,12 +54,17 @@ const iconMap: Record<string, React.ComponentType<any>> = {
   Loader: LoadingOutlined,
   BarChart2: BarChartOutlined,
   LogOut: LogoutOutlined,
+  Logout: LogoutOutlined,
   Eye: EyeOutlined,
   EyeOff: EyeInvisibleOutlined,
   Download: DownloadOutlined,
   Upload: UploadOutlined,
   Lock: LockOutlined,
   Info: InfoCircleOutlined,
+  Dashboard: DashboardOutlined,
+  Menu: MenuOutlined,
+  Plus: PlusOutlined,
+  Settings: SettingOutlined,
 };
 
 type IconName = keyof typeof iconMap;

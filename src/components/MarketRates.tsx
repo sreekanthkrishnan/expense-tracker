@@ -6,8 +6,9 @@
  * Shows cached data when offline.
  */
 
-import { useState, useEffect } from 'react';
-import { fetchGoldSilverRates } from '../utils/market/fetchGoldSilverRates';
+import { useState, useEffect, useRef } from 'react';
+import { fetchMetalRates } from '../services/metalRatesService';
+import { getCachedMarketData, cacheGoldSilverRates } from '../utils/market/cacheMarketData';
 import type { GoldSilverRates } from '../utils/market/types';
 import { formatMetalPrice } from '../utils/market/calculateCaratRates';
 import { Icon } from './common/Icon';
@@ -17,41 +18,87 @@ const MarketRates = () => {
   const { profile } = useAppSelector((state) => state.profile);
   const [rates, setRates] = useState<GoldSilverRates | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasFetched, setHasFetched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fetchRef = useRef(false); // Prevent multiple simultaneous fetches
 
   const currency = profile?.currency || 'INR';
   const currencySymbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'INR' ? '₹' : currency;
 
+  /**
+   * Load rates from backend (Supabase)
+   * Single fetch per screen load - no polling, no retries
+   */
   const loadRates = async (forceRefresh: boolean = false) => {
+    // Prevent multiple simultaneous fetches
+    if (fetchRef.current && !forceRefresh) {
+      return;
+    }
+
+    // If already fetched and not forcing refresh, use cached data
+    if (hasFetched && !forceRefresh) {
+      const cached = await getCachedMarketData();
+      if (cached?.goldSilver) {
+        setRates(cached.goldSilver);
+        setLoading(false);
+        return;
+      }
+    }
+
+    fetchRef.current = true;
     setLoading(true);
     setError(null);
 
     try {
-      const data = await fetchGoldSilverRates(currency, forceRefresh);
+      // Get today's date
+      const today = new Date().toISOString().split('T')[0];
       
-      // Check if we got valid data
-      if (!data || !data.gold24K || data.gold24K.perGram === 0) {
-        throw new Error('Failed to fetch valid gold prices. Please check your internet connection and try again.');
+      // Fetch from backend (Supabase) - single call
+      const data = await fetchMetalRates(today);
+      
+      if (data && data.gold24K && data.silver) {
+        // Valid rates found
+        setRates(data);
+        setHasFetched(true);
+        
+        // Cache for offline access
+        await cacheGoldSilverRates(data);
+      } else {
+        // No rates in backend - check cache
+        const cached = await getCachedMarketData();
+        if (cached?.goldSilver && cached.goldSilver.gold24K?.perGram > 0) {
+          setRates(cached.goldSilver);
+          setError('No rates found in database. Showing cached data.');
+        } else {
+          setError('No metal rates available. Please add rates via admin dashboard.');
+          setRates(null);
+        }
+        setHasFetched(true);
       }
-      
-      // Check if sanity check failed
-      if (data.sanityCheckFailed) {
-        setError('Price validation failed. The calculated gold price appears incorrect. Please try refreshing.');
-      }
-      
-      setRates(data);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch market rates';
       setError(errorMessage);
       console.error('Error fetching market rates:', err);
+      
+      // Try to use cached data on error
+      const cached = await getCachedMarketData();
+      if (cached?.goldSilver) {
+        setRates(cached.goldSilver);
+      }
+      setHasFetched(true);
     } finally {
       setLoading(false);
+      fetchRef.current = false;
     }
   };
 
+  // Fetch once on mount - no dependency on currency to prevent re-fetches
   useEffect(() => {
-    loadRates();
-  }, [currency]);
+    if (!hasFetched) {
+      loadRates();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - fetch only once
 
   const formatDate = (dateString: string): string => {
     try {
@@ -73,9 +120,25 @@ const MarketRates = () => {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Today's Gold & Silver Rates</h3>
-          <p className="text-xs text-gray-600 mt-1">
-            {rates?.fetchedAt ? `Last updated: ${formatDate(rates.fetchedAt)}` : 'Loading...'}
-          </p>
+          <div className="text-xs text-gray-600 mt-1">
+            {rates?.fetchedAt && (
+              <>
+                <p>Last updated: {formatDate(rates.fetchedAt)}</p>
+                {rates.source && (
+                  <p className="mt-1">
+                    Source: {rates.source === 'api' ? (
+                      <span className="text-green-600 font-medium">Market API</span>
+                    ) : rates.source === 'admin' ? (
+                      <span className="text-amber-600 font-medium">Admin fallback</span>
+                    ) : (
+                      <span className="text-gray-500">Cached</span>
+                    )}
+                  </p>
+                )}
+              </>
+            )}
+            {!rates?.fetchedAt && <p>Loading...</p>}
+          </div>
         </div>
         <button
           onClick={() => loadRates(true)}
@@ -110,7 +173,7 @@ const MarketRates = () => {
         </div>
       )}
 
-      {rates && rates.gold24K && rates.gold22K && rates.silver && (
+      {rates && rates.gold24K && rates.gold22K && rates.silver && (rates.gold24K.perGram > 0 || rates.silver.perGram > 0) && (
         <>
           {/* Price Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -195,7 +258,7 @@ const MarketRates = () => {
           <Icon name="Info" size={14} className="mr-2 mt-0.5 flex-shrink-0" />
           <span>
             <strong>Disclaimer:</strong> Market prices are indicative. Rates may vary by jeweller and location.
-            Rates are fetched from public market APIs and cached locally for offline access.
+            Rates are stored in the backend database and cached locally for offline access.
           </span>
         </p>
       </div>

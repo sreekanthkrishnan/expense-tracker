@@ -29,9 +29,30 @@ const initialState: AuthState = {
 export const initializeAuth = createAsyncThunk(
   'auth/initialize',
   async () => {
-    const { data: { session }, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    return session;
+    try {
+      // Get current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error('Error getting session:', sessionError);
+        throw sessionError;
+      }
+      
+      // Also get current user to ensure we have the latest state
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.error('Error getting user:', userError);
+        // Don't throw - session might still be valid
+      }
+      
+      // Return session with user (prefer user from getUser if available)
+      return {
+        session,
+        user: user || session?.user || null,
+      };
+    } catch (error) {
+      console.error('Error initializing auth:', error);
+      throw error;
+    }
   }
 );
 
@@ -95,14 +116,18 @@ const authSlice = createSlice({
       })
       .addCase(initializeAuth.fulfilled, (state, action) => {
         state.loading = false;
-        state.session = action.payload;
-        state.user = action.payload?.user ?? null;
+        state.session = action.payload.session;
+        // Use user from payload if available, otherwise from session
+        state.user = action.payload.user || action.payload.session?.user || null;
         state.initialized = true;
       })
       .addCase(initializeAuth.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Failed to initialize auth';
         state.initialized = true;
+        // Even on error, mark as initialized so UI can proceed
+        state.user = null;
+        state.session = null;
       });
 
     // Sign up

@@ -11,7 +11,7 @@
 
 import type { SavingsGoal } from '../../types';
 import type { GrowthPrediction } from './types';
-import { fetchGoldSilverRates } from './fetchGoldSilverRates';
+// No imports needed - backend owns all rate data, frontend uses historical averages for predictions
 import { fetchMutualFundData } from './fetchMutualFundData';
 import { getFDRateForTenure } from './fetchFDRates';
 
@@ -39,17 +39,15 @@ const compoundInterest = (
 
 /**
  * Calculate growth for Gold investment
+ * Uses historical average - no API calls needed
  */
 const calculateGoldGrowth = async (
   currentValue: number,
-  years: number,
-  currency: string = 'INR'
+  years: number
 ): Promise<GrowthPrediction> => {
-  // Fetch current gold rates (for reference, though we use historical average for prediction)
-  await fetchGoldSilverRates(currency);
-
   // Historical average annual growth for gold (typically 8-12% over long term)
   // Using conservative estimate of 10% annual growth
+  // No API calls - backend owns all rate data
   const avgAnnualGrowth = 10.0;
 
   // Calculate predicted value
@@ -69,16 +67,14 @@ const calculateGoldGrowth = async (
 
 /**
  * Calculate growth for Silver investment
+ * Uses historical average - no API calls needed
  */
 const calculateSilverGrowth = async (
   currentValue: number,
-  years: number,
-  currency: string = 'INR'
+  years: number
 ): Promise<GrowthPrediction> => {
-  // Fetch current silver rates (for reference, though we use historical average for prediction)
-  await fetchGoldSilverRates(currency);
-
   // Historical average annual growth for silver (typically 6-10% over long term)
+  // No API calls - backend owns all rate data
   const avgAnnualGrowth = 8.0;
 
   const predictedValue = compoundInterest(currentValue, avgAnnualGrowth, years);
@@ -251,10 +247,10 @@ const calculateCustomGrowth = (
 
 /**
  * Main function to calculate investment growth
+ * No currency parameter needed - backend owns all rate data
  */
 export const calculateInvestmentGrowth = async (
-  goal: SavingsGoal,
-  currency: string = 'INR'
+  goal: SavingsGoal
 ): Promise<GrowthPrediction | null> => {
   if (!goal.investmentType) {
     // No investment type - return null (regular savings goal)
@@ -268,10 +264,10 @@ export const calculateInvestmentGrowth = async (
 
   switch (investmentType) {
     case 'gold':
-      return await calculateGoldGrowth(currentValue, years, currency);
+      return await calculateGoldGrowth(currentValue, years);
     
     case 'silver':
-      return await calculateSilverGrowth(currentValue, years, currency);
+      return await calculateSilverGrowth(currentValue, years);
     
     case 'mutual_fund':
       return await calculateMutualFundGrowth(

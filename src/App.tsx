@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { Routes, Route, Link } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { store } from './store/store';
 import { useAppDispatch, useAppSelector } from './store/hooks';
@@ -10,7 +11,9 @@ import { loadGoals } from './store/slices/savingsGoalSlice';
 import { signOut } from './store/slices/authSlice';
 import { useTheme } from './hooks/useTheme';
 import { Icon } from './components/common/Icon';
+import { isAdmin } from './services/profileService';
 import AuthGuard from './auth/AuthGuard';
+import AdminRoutes from './admin/AdminRoutes';
 import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
 import IncomeModule from './components/IncomeModule';
@@ -29,11 +32,42 @@ function AppContent() {
   const [dataLoaded, setDataLoaded] = useState(false);
   const [showMigrationModal, setShowMigrationModal] = useState(false);
   const [migrationSummary, setMigrationSummary] = useState<any>(null);
+  const [isUserAdmin, setIsUserAdmin] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
   
   // Initialize theme (applies theme on mount)
   useTheme();
+
+  // Check if user is admin
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (user) {
+        const adminStatus = await isAdmin();
+        setIsUserAdmin(adminStatus);
+      }
+    };
+    checkAdmin();
+  }, [user]);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserMenu]);
 
   useEffect(() => {
     // Only load data if user is authenticated
@@ -88,7 +122,7 @@ function AppContent() {
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: 'Home' as const },
-    { id: 'profile', label: 'Profile', icon: 'User' as const },
+    // { id: 'profile', label: 'Profile', icon: 'User' as const },
     { id: 'income', label: 'Income', icon: 'TrendingUp' as const },
     { id: 'expenses', label: 'Expenses', icon: 'TrendingDown' as const },
     { id: 'loans', label: 'Loans', icon: 'CreditCard' as const },
@@ -107,18 +141,6 @@ function AppContent() {
                 <Icon name="DollarSign" size={24} className="text-gray-900" />
                 Finance Tracker
               </h1>
-              {user && (
-                <button
-                  onClick={handleLogout}
-                  className="ml-4 px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-                  aria-label="Sign out"
-                >
-                  <span className="flex items-center gap-2">
-                    <Icon name="LogOut" size={16} />
-                    <span className="hidden sm:inline">Sign Out</span>
-                  </span>
-                </button>
-              )}
               {/* Desktop tabs */}
               <div className="hidden lg:ml-8 lg:flex lg:space-x-1">
                 {tabs.map((tab) => (
@@ -157,6 +179,69 @@ function AppContent() {
                 ))}
               </div>
             </div>
+            {/* User Menu - Right side */}
+            {user && (
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="User menu"
+                  aria-expanded={showUserMenu}
+                >
+                  <Icon name="User" size={18} />
+                  <Icon name="ChevronDown" size={14} className={`transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    {/* User Info */}
+                    <div className="px-4 py-3 border-b border-gray-200">
+                      <p className="text-sm font-medium text-gray-900">
+                        {user.email}
+                      </p>
+                      {isUserAdmin && (
+                        <p className="text-xs text-purple-600 mt-1">Administrator</p>
+                      )}
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="py-1">
+                      {isUserAdmin && (
+                        <Link
+                          to="/admin"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                        >
+                          <Icon name="Dashboard" size={16} />
+                          <span>Admin Dashboard</span>
+                        </Link>
+                      )}
+                      <button
+                        onClick={() => {
+                          setActiveTab('profile');
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                      >
+                        <Icon name="User" size={16} />
+                        <span>Profile</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleLogout();
+                          setShowUserMenu(false);
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <Icon name="LogOut" size={16} />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         {/* Mobile menu - horizontal scroll */}
@@ -228,9 +313,20 @@ function AppContent() {
 function App() {
   return (
     <Provider store={store}>
-      <AuthGuard>
-        <AppContent />
-      </AuthGuard>
+      <Routes>
+        {/* Admin Routes */}
+        <Route path="/admin/*" element={<AdminRoutes />} />
+        
+        {/* Main App Routes */}
+        <Route
+          path="/*"
+          element={
+            <AuthGuard>
+              <AppContent />
+            </AuthGuard>
+          }
+        />
+      </Routes>
     </Provider>
   );
 }

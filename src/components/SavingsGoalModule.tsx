@@ -87,7 +87,7 @@ const SavingsGoalModule = () => {
       for (const goal of goals) {
         if (goal.investmentType) {
           try {
-            const prediction = await calculateInvestmentGrowth(goal, currency);
+            const prediction = await calculateInvestmentGrowth(goal);
             predictions[goal.id] = prediction;
           } catch (error) {
             console.warn(`Failed to calculate growth for goal ${goal.id}:`, error);
@@ -101,7 +101,8 @@ const SavingsGoalModule = () => {
     if (goals.length > 0) {
       loadPredictions();
     }
-  }, [goals, currency]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goals]); // Only depend on goals, not currency - backend owns rate data
 
   const handleEdit = (goal: SavingsGoal) => {
     setEditingGoal(goal);

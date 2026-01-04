@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { initializeAuth } from '../store/slices/authSlice';
+import { initializeAuth, setSession } from '../store/slices/authSlice';
 import { supabase } from '../lib/supabaseClient';
 import Login from './Login';
 import Signup from './Signup';
@@ -24,14 +24,23 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
   const { user, initialized } = useAppSelector((state) => state.auth);
   const [showSignup, setShowSignup] = useState(false);
 
+  console.log('user', user);
+
   useEffect(() => {
     // Initialize auth state on mount
     dispatch(initializeAuth());
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event: string) => {
+      async (event: string, session) => {
+        console.log('Auth state changed:', event, session?.user?.id);
+        
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          // Update state immediately with session data
+          if (session) {
+            dispatch(setSession(session));
+          }
+          // Then reinitialize to ensure consistency
           dispatch(initializeAuth());
         } else if (event === 'SIGNED_OUT') {
           dispatch(initializeAuth());

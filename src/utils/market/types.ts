@@ -20,6 +20,12 @@ export interface GoldSilverRates {
   fetchedAt: string; // ISO timestamp
   currency: string;
   sanityCheckFailed?: boolean; // True if price validation failed
+  source?: 'api' | 'admin' | 'cache'; // Source of the rates (for transparency)
+  sourceDetails?: {
+    gold24K: 'api' | 'admin' | 'calculated';
+    gold22K: 'api' | 'admin' | 'calculated';
+    silver: 'api' | 'admin' | 'calculated';
+  }; // Per-metal source information
 }
 
 // Legacy interface for backward compatibility
