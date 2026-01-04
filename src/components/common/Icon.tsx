@@ -24,6 +24,8 @@ import {
   LogoutOutlined,
   EyeOutlined,
   EyeInvisibleOutlined,
+  DownloadOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 
 // Icon name mapping from old names to Ant Design icons
@@ -46,6 +48,8 @@ const iconMap: Record<string, React.ComponentType<any>> = {
   LogOut: LogoutOutlined,
   Eye: EyeOutlined,
   EyeOff: EyeInvisibleOutlined,
+  Download: DownloadOutlined,
+  Upload: UploadOutlined,
 };
 
 type IconName = keyof typeof iconMap;

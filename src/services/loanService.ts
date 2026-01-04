@@ -43,9 +43,16 @@ export const fetchLoans = async (): Promise<Loan[]> => {
  * Create a new loan
  */
 export const createLoan = async (loan: Omit<Loan, 'id'>): Promise<Loan> => {
+  // Get current user ID (required for RLS policy)
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
   const { data, error } = await supabase
     .from('loans')
     .insert({
+      user_id: user.id, // Required for RLS policy
       name: loan.name,
       type: loan.type,
       principal: loan.principal,

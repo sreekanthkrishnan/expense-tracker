@@ -38,9 +38,16 @@ export const fetchIncomes = async (): Promise<Income[]> => {
  * Create a new income
  */
 export const createIncome = async (income: Omit<Income, 'id'>): Promise<Income> => {
+  // Get current user ID (required for RLS policy)
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
   const { data, error } = await supabase
     .from('incomes')
     .insert({
+      user_id: user.id, // Required for RLS policy
       amount: income.amount,
       type: income.type,
       source: income.source,

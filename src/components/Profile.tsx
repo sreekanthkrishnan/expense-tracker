@@ -3,6 +3,7 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { updateProfile, loadProfile } from '../store/slices/profileSlice';
 import { useTheme } from '../hooks/useTheme';
 import { Icon } from './common/Icon';
+import DataBackup from './DataBackup';
 import type { Profile as ProfileType, RiskLevel } from '../types';
 import type { ThemeKey } from '../theme/themes';
 
@@ -223,6 +224,11 @@ const Profile = () => {
               <strong>Note:</strong> The app background is always white. Themes affect cards, accents, buttons, and highlights only.
             </p>
           </div>
+        </div>
+
+        {/* Data Backup Section */}
+        <div className="mt-6">
+          <DataBackup />
         </div>
       </div>
     </div>

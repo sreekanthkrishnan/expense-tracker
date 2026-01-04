@@ -40,9 +40,16 @@ export const fetchSavingsGoals = async (): Promise<SavingsGoal[]> => {
  * Create a new savings goal
  */
 export const createSavingsGoal = async (goal: Omit<SavingsGoal, 'id'>): Promise<SavingsGoal> => {
+  // Get current user ID (required for RLS policy)
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
   const { data, error } = await supabase
     .from('savings')
     .insert({
+      user_id: user.id, // Required for RLS policy
       name: goal.name,
       target_amount: goal.targetAmount,
       target_date: goal.targetDate,

@@ -18,10 +18,17 @@ import ExpenseModule from './components/ExpenseModule';
 import LoanModule from './components/LoanModule';
 import SavingsGoalModule from './components/SavingsGoalModule';
 import ExpenseReduction from './components/ExpenseReduction';
+import MigrationModal from './components/MigrationModal';
+import { detectIndexedDBData } from './utils/migration/detectIndexedDBData';
+import { getMigrationSummary } from './utils/migration/getMigrationSummary';
+import { isMigrationDone } from './utils/migration/markMigrationDone';
+import { getAllIndexedDBData } from './utils/migration/detectIndexedDBData';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [showMigrationModal, setShowMigrationModal] = useState(false);
+  const [migrationSummary, setMigrationSummary] = useState<any>(null);
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
   
@@ -39,6 +46,19 @@ function AppContent() {
           dispatch(loadLoans());
           dispatch(loadGoals());
           setDataLoaded(true);
+
+          // Check for IndexedDB data that needs migration
+          const hasMigrated = isMigrationDone(user.id);
+          if (!hasMigrated) {
+            const dataSummary = await detectIndexedDBData();
+            if (dataSummary.hasData) {
+              // Get full data to generate summary
+              const indexedDBData = await getAllIndexedDBData();
+              const summary = getMigrationSummary(indexedDBData);
+              setMigrationSummary(summary);
+              setShowMigrationModal(true);
+            }
+          }
         } catch (error) {
           console.error('Failed to load data:', error);
           setDataLoaded(true);
@@ -47,6 +67,7 @@ function AppContent() {
       initialize();
     } else {
       setDataLoaded(false);
+      setShowMigrationModal(false);
     }
   }, [dispatch, user]);
 
@@ -189,6 +210,17 @@ function AppContent() {
           {activeTab === 'reduction' && <ExpenseReduction />}
         </div>
       </main>
+
+      {/* Migration Modal */}
+      {user && migrationSummary && (
+        <MigrationModal
+          isOpen={showMigrationModal}
+          onClose={() => setShowMigrationModal(false)}
+          onSkip={() => setShowMigrationModal(false)}
+          userId={user.id}
+          summary={migrationSummary}
+        />
+      )}
     </div>
   );
 }

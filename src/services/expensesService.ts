@@ -38,18 +38,24 @@ export const fetchExpenses = async (): Promise<Expense[]> => {
 
 /**
  * Create a new expense
- * user_id is automatically set by RLS policy
+ * user_id is set from authenticated user (required for RLS policy)
  */
 export const createExpense = async (expense: Omit<Expense, 'id'>): Promise<Expense> => {
+  // Get current user ID (required for RLS policy)
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('User not authenticated');
+  }
+
   const { data, error } = await supabase
     .from('expenses')
     .insert({
+      user_id: user.id, // Required for RLS policy
       amount: expense.amount,
       category: expense.category,
       date: expense.date,
       payment_method: expense.paymentMethod,
       notes: expense.notes || null,
-      // user_id is automatically set by RLS policy
     })
     .select()
     .single();
