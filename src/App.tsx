@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Provider } from 'react-redux';
 import { store } from './store/store';
-import { initDB } from './utils/indexedDB';
-import { useAppDispatch } from './store/hooks';
+import { useAppDispatch, useAppSelector } from './store/hooks';
 import { loadProfile } from './store/slices/profileSlice';
 import { loadIncomes } from './store/slices/incomeSlice';
 import { loadExpenses } from './store/slices/expenseSlice';
 import { loadLoans } from './store/slices/loanSlice';
 import { loadGoals } from './store/slices/savingsGoalSlice';
+import { signOut } from './store/slices/authSlice';
 import { useTheme } from './hooks/useTheme';
 import { Icon } from './components/common/Icon';
+import AuthGuard from './auth/AuthGuard';
 import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
 import IncomeModule from './components/IncomeModule';
@@ -20,41 +21,45 @@ import ExpenseReduction from './components/ExpenseReduction';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [dbInitialized, setDbInitialized] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const dispatch = useAppDispatch();
+  const { user } = useAppSelector((state) => state.auth);
   
   // Initialize theme (applies theme on mount)
   useTheme();
 
   useEffect(() => {
-    const initialize = async () => {
-      try {
-        await initDB();
-        setDbInitialized(true);
-        dispatch(loadProfile());
-        dispatch(loadIncomes());
-        dispatch(loadExpenses());
-        dispatch(loadLoans());
-        dispatch(loadGoals());
-      } catch (error) {
-        console.error('Failed to initialize database:', error);
-        setDbInitialized(true); // Continue with LocalStorage fallback
-        dispatch(loadProfile());
-        dispatch(loadIncomes());
-        dispatch(loadExpenses());
-        dispatch(loadLoans());
-        dispatch(loadGoals());
-      }
-    };
-    initialize();
-  }, [dispatch]);
+    // Only load data if user is authenticated
+    if (user) {
+      const initialize = async () => {
+        try {
+          dispatch(loadProfile());
+          dispatch(loadIncomes());
+          dispatch(loadExpenses());
+          dispatch(loadLoans());
+          dispatch(loadGoals());
+          setDataLoaded(true);
+        } catch (error) {
+          console.error('Failed to load data:', error);
+          setDataLoaded(true);
+        }
+      };
+      initialize();
+    } else {
+      setDataLoaded(false);
+    }
+  }, [dispatch, user]);
 
-  if (!dbInitialized) {
+  const handleLogout = async () => {
+    await dispatch(signOut());
+  };
+
+  if (!dataLoaded && user) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-background)' }} role="status" aria-live="polite">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 mx-auto" style={{ borderColor: 'var(--color-background-dark)', borderTopColor: 'var(--color-primary)' }} aria-hidden="true"></div>
-          <p className="mt-4 text-sm sm:text-base" style={{ color: 'var(--color-primary)' }}>Initializing...</p>
+          <p className="mt-4 text-sm sm:text-base" style={{ color: 'var(--color-primary)' }}>Loading your data...</p>
         </div>
       </div>
     );
@@ -81,6 +86,18 @@ function AppContent() {
                 <Icon name="DollarSign" size={24} className="text-gray-900" />
                 Finance Tracker
               </h1>
+              {user && (
+                <button
+                  onClick={handleLogout}
+                  className="ml-4 px-3 py-1.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="Sign out"
+                >
+                  <span className="flex items-center gap-2">
+                    <Icon name="LogOut" size={16} />
+                    <span className="hidden sm:inline">Sign Out</span>
+                  </span>
+                </button>
+              )}
               {/* Desktop tabs */}
               <div className="hidden lg:ml-8 lg:flex lg:space-x-1">
                 {tabs.map((tab) => (
@@ -179,7 +196,9 @@ function AppContent() {
 function App() {
   return (
     <Provider store={store}>
-      <AppContent />
+      <AuthGuard>
+        <AppContent />
+      </AuthGuard>
     </Provider>
   );
 }

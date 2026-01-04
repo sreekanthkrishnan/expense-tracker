@@ -1,7 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import type { SavingsGoal, GoalStatus } from '../../types';
-import { dbGetAll, dbPut, dbDelete } from '../../utils/indexedDB';
+import * as savingsService from '../../services/savingsService';
 
 interface SavingsGoalState {
   goals: SavingsGoal[];
@@ -81,7 +81,7 @@ export const { setGoals, addGoal, updateGoal, removeGoal, setLoading, setError }
 export const loadGoals = () => async (dispatch: any) => {
   dispatch(setLoading(true));
   try {
-    const goals = await dbGetAll<SavingsGoal>('savingsGoals');
+    const goals = await savingsService.fetchSavingsGoals();
     dispatch(setGoals(goals));
   } catch (error) {
     dispatch(setError('Failed to load savings goals'));
@@ -93,14 +93,18 @@ export const loadGoals = () => async (dispatch: any) => {
 export const saveGoal = (goal: SavingsGoal) => async (dispatch: any, getState: any) => {
   dispatch(setLoading(true));
   try {
-    await dbPut('savingsGoals', goal);
+    let updatedGoal: SavingsGoal;
     const existingIndex = getState().savingsGoal.goals.findIndex(
       (g: SavingsGoal) => g.id === goal.id
     );
+    
     if (existingIndex !== -1) {
-      dispatch(updateGoal(goal));
+      updatedGoal = await savingsService.updateSavingsGoal(goal);
+      dispatch(updateGoal(updatedGoal));
     } else {
-      dispatch(addGoal(goal));
+      const { id, ...goalData } = goal;
+      updatedGoal = await savingsService.createSavingsGoal(goalData);
+      dispatch(addGoal(updatedGoal));
     }
   } catch (error) {
     dispatch(setError('Failed to save savings goal'));
@@ -112,7 +116,7 @@ export const saveGoal = (goal: SavingsGoal) => async (dispatch: any, getState: a
 export const deleteGoal = (id: string) => async (dispatch: any) => {
   dispatch(setLoading(true));
   try {
-    await dbDelete('savingsGoals', id);
+    await savingsService.deleteSavingsGoal(id);
     dispatch(removeGoal(id));
   } catch (error) {
     dispatch(setError('Failed to delete savings goal'));

@@ -1,7 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import type { Income } from '../../types';
-import { dbGetAll, dbPut, dbDelete } from '../../utils/indexedDB';
+import * as incomeService from '../../services/incomeService';
 
 interface IncomeState {
   incomes: Income[];
@@ -49,7 +49,7 @@ export const { setIncomes, addIncome, updateIncome, removeIncome, setLoading, se
 export const loadIncomes = () => async (dispatch: any) => {
   dispatch(setLoading(true));
   try {
-    const incomes = await dbGetAll<Income>('income');
+    const incomes = await incomeService.fetchIncomes();
     dispatch(setIncomes(incomes));
   } catch (error) {
     dispatch(setError('Failed to load incomes'));
@@ -61,14 +61,18 @@ export const loadIncomes = () => async (dispatch: any) => {
 export const saveIncome = (income: Income) => async (dispatch: any, getState: any) => {
   dispatch(setLoading(true));
   try {
-    await dbPut('income', income);
+    let updatedIncome: Income;
     const existingIndex = getState().income.incomes.findIndex(
       (i: Income) => i.id === income.id
     );
+    
     if (existingIndex !== -1) {
-      dispatch(updateIncome(income));
+      updatedIncome = await incomeService.updateIncome(income);
+      dispatch(updateIncome(updatedIncome));
     } else {
-      dispatch(addIncome(income));
+      const { id, ...incomeData } = income;
+      updatedIncome = await incomeService.createIncome(incomeData);
+      dispatch(addIncome(updatedIncome));
     }
   } catch (error) {
     dispatch(setError('Failed to save income'));
@@ -80,7 +84,7 @@ export const saveIncome = (income: Income) => async (dispatch: any, getState: an
 export const deleteIncome = (id: string) => async (dispatch: any) => {
   dispatch(setLoading(true));
   try {
-    await dbDelete('income', id);
+    await incomeService.deleteIncome(id);
     dispatch(removeIncome(id));
   } catch (error) {
     dispatch(setError('Failed to delete income'));

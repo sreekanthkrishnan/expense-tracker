@@ -1,7 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import type { Expense } from '../../types';
-import { dbGetAll, dbPut, dbDelete } from '../../utils/indexedDB';
+import * as expensesService from '../../services/expensesService';
 
 interface ExpenseState {
   expenses: Expense[];
@@ -71,7 +71,7 @@ export const {
 export const loadExpenses = () => async (dispatch: any) => {
   dispatch(setLoading(true));
   try {
-    const expenses = await dbGetAll<Expense>('expenses');
+    const expenses = await expensesService.fetchExpenses();
     dispatch(setExpenses(expenses));
   } catch (error) {
     dispatch(setError('Failed to load expenses'));
@@ -83,14 +83,20 @@ export const loadExpenses = () => async (dispatch: any) => {
 export const saveExpense = (expense: Expense) => async (dispatch: any, getState: any) => {
   dispatch(setLoading(true));
   try {
-    await dbPut('expenses', expense);
+    let updatedExpense: Expense;
     const existingIndex = getState().expense.expenses.findIndex(
       (e: Expense) => e.id === expense.id
     );
+    
     if (existingIndex !== -1) {
-      dispatch(updateExpense(expense));
+      // Update existing expense
+      updatedExpense = await expensesService.updateExpense(expense);
+      dispatch(updateExpense(updatedExpense));
     } else {
-      dispatch(addExpense(expense));
+      // Create new expense
+      const { id, ...expenseData } = expense;
+      updatedExpense = await expensesService.createExpense(expenseData);
+      dispatch(addExpense(updatedExpense));
     }
   } catch (error) {
     dispatch(setError('Failed to save expense'));
@@ -102,7 +108,7 @@ export const saveExpense = (expense: Expense) => async (dispatch: any, getState:
 export const deleteExpense = (id: string) => async (dispatch: any) => {
   dispatch(setLoading(true));
   try {
-    await dbDelete('expenses', id);
+    await expensesService.deleteExpense(id);
     dispatch(removeExpense(id));
   } catch (error) {
     dispatch(setError('Failed to delete expense'));

@@ -1,7 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import type { Loan } from '../../types';
-import { dbGetAll, dbPut, dbDelete } from '../../utils/indexedDB';
+import * as loanService from '../../services/loanService';
 
 interface LoanState {
   loans: Loan[];
@@ -70,7 +70,7 @@ export const { setLoans, addLoan, updateLoan, removeLoan, setLoading, setError }
 export const loadLoans = () => async (dispatch: any) => {
   dispatch(setLoading(true));
   try {
-    const loans = await dbGetAll<Loan>('loans');
+    const loans = await loanService.fetchLoans();
     dispatch(setLoans(loans));
   } catch (error) {
     dispatch(setError('Failed to load loans'));
@@ -82,14 +82,18 @@ export const loadLoans = () => async (dispatch: any) => {
 export const saveLoan = (loan: Loan) => async (dispatch: any, getState: any) => {
   dispatch(setLoading(true));
   try {
-    await dbPut('loans', loan);
+    let updatedLoan: Loan;
     const existingIndex = getState().loan.loans.findIndex(
       (l: Loan) => l.id === loan.id
     );
+    
     if (existingIndex !== -1) {
-      dispatch(updateLoan(loan));
+      updatedLoan = await loanService.updateLoan(loan);
+      dispatch(updateLoan(updatedLoan));
     } else {
-      dispatch(addLoan(loan));
+      const { id, ...loanData } = loan;
+      updatedLoan = await loanService.createLoan(loanData);
+      dispatch(addLoan(updatedLoan));
     }
   } catch (error) {
     dispatch(setError('Failed to save loan'));
@@ -101,7 +105,7 @@ export const saveLoan = (loan: Loan) => async (dispatch: any, getState: any) => 
 export const deleteLoan = (id: string) => async (dispatch: any) => {
   dispatch(setLoading(true));
   try {
-    await dbDelete('loans', id);
+    await loanService.deleteLoan(id);
     dispatch(removeLoan(id));
   } catch (error) {
     dispatch(setError('Failed to delete loan'));

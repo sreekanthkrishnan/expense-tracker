@@ -9,9 +9,10 @@ import type { ThemeKey } from '../theme/themes';
 const Profile = () => {
   const dispatch = useAppDispatch();
   const { profile, loading } = useAppSelector((state) => state.profile);
+  const { user } = useAppSelector((state) => state.auth);
   const { currentThemeKey, setTheme, availableThemes } = useTheme();
   const [formData, setFormData] = useState<ProfileType>({
-    id: 'default',
+    id: user?.id || '',
     name: '',
     currency: 'USD',
     monthlyIncome: 0,
@@ -25,8 +26,11 @@ const Profile = () => {
   useEffect(() => {
     if (profile) {
       setFormData(profile);
+    } else if (user) {
+      // Update formData with user ID when user is available
+      setFormData((prev) => ({ ...prev, id: user.id }));
     }
-  }, [profile]);
+  }, [profile, user]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

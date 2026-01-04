@@ -21,6 +21,9 @@ import {
   AimOutlined,
   LoadingOutlined,
   BarChartOutlined,
+  LogoutOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
 } from '@ant-design/icons';
 
 // Icon name mapping from old names to Ant Design icons
@@ -40,6 +43,9 @@ const iconMap: Record<string, React.ComponentType<any>> = {
   Target: AimOutlined,
   Loader: LoadingOutlined,
   BarChart2: BarChartOutlined,
+  LogOut: LogoutOutlined,
+  Eye: EyeOutlined,
+  EyeOff: EyeInvisibleOutlined,
 };
 
 type IconName = keyof typeof iconMap;

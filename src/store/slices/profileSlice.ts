@@ -1,7 +1,7 @@
 import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import type { Profile } from '../../types';
-import { dbPut, dbGetAll } from '../../utils/indexedDB';
+import * as profileService from '../../services/profileService';
 
 interface ProfileState {
   profile: Profile | null;
@@ -33,24 +33,31 @@ const profileSlice = createSlice({
 
 export const { setProfile, setLoading, setError } = profileSlice.actions;
 
-export const loadProfile = () => async (dispatch: any) => {
+export const loadProfile = () => async (dispatch: any, getState: any) => {
   dispatch(setLoading(true));
   try {
-    const profiles = await dbGetAll<Profile>('profile');
-    if (profiles.length > 0) {
-      dispatch(setProfile(profiles[0]));
-    } else {
+    const userId = getState().auth.user?.id;
+    if (!userId) {
+      dispatch(setError('User not authenticated'));
+      dispatch(setLoading(false));
+      return;
+    }
+
+    let profile = await profileService.fetchProfile(userId);
+    
+    if (!profile) {
       // Create default profile
-      const defaultProfile: Profile = {
-        id: 'default',
+      profile = {
+        id: userId,
         name: '',
         currency: 'USD',
         monthlyIncome: 0,
         riskLevel: 'Medium',
       };
-      await dbPut('profile', defaultProfile);
-      dispatch(setProfile(defaultProfile));
+      profile = await profileService.upsertProfile(profile);
     }
+    
+    dispatch(setProfile(profile));
   } catch (error) {
     dispatch(setError('Failed to load profile'));
   } finally {
@@ -61,8 +68,8 @@ export const loadProfile = () => async (dispatch: any) => {
 export const updateProfile = (profile: Profile) => async (dispatch: any) => {
   dispatch(setLoading(true));
   try {
-    await dbPut('profile', profile);
-    dispatch(setProfile(profile));
+    const updatedProfile = await profileService.upsertProfile(profile);
+    dispatch(setProfile(updatedProfile));
   } catch (error) {
     dispatch(setError('Failed to update profile'));
   } finally {
