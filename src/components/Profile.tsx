@@ -4,6 +4,7 @@ import { updateProfile, loadProfile } from '../store/slices/profileSlice';
 import { useTheme } from '../hooks/useTheme';
 import { Icon } from './common/Icon';
 import DataBackup from './DataBackup';
+import DataCleanup from './DataCleanup';
 import type { Profile as ProfileType, RiskLevel } from '../types';
 import type { ThemeKey } from '../theme/themes';
 
@@ -229,6 +230,11 @@ const Profile = () => {
         {/* Data Backup Section */}
         <div className="mt-6">
           <DataBackup />
+        </div>
+
+        {/* Data Cleanup Section */}
+        <div className="mt-6">
+          <DataCleanup />
         </div>
       </div>
     </div>

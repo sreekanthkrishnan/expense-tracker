@@ -33,6 +33,8 @@ export const fetchExpenses = async (): Promise<Expense[]> => {
     date: row.date,
     paymentMethod: row.payment_method,
     notes: row.notes || undefined,
+    // Include created_at for duplicate detection (if available)
+    ...(row.created_at && { created_at: row.created_at }),
   }));
 };
 
@@ -56,6 +58,7 @@ export const createExpense = async (expense: Omit<Expense, 'id'>): Promise<Expen
       date: expense.date,
       payment_method: expense.paymentMethod,
       notes: expense.notes || null,
+      // created_at is automatically set by database default (NOW())
     })
     .select()
     .single();
@@ -72,6 +75,8 @@ export const createExpense = async (expense: Omit<Expense, 'id'>): Promise<Expen
     date: data.date,
     paymentMethod: data.payment_method,
     notes: data.notes || undefined,
+    // Include created_at for duplicate detection (if available)
+    ...(data.created_at && { created_at: data.created_at }),
   };
 };
 
@@ -105,6 +110,8 @@ export const updateExpense = async (expense: Expense): Promise<Expense> => {
     date: data.date,
     paymentMethod: data.payment_method,
     notes: data.notes || undefined,
+    // Include created_at for duplicate detection (if available)
+    ...(data.created_at && { created_at: data.created_at }),
   };
 };
 

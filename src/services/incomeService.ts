@@ -31,6 +31,8 @@ export const fetchIncomes = async (): Promise<Income[]> => {
     date: row.date,
     recurringFrequency: row.recurring_frequency || undefined,
     notes: row.notes || undefined,
+    // Include created_at for duplicate detection (if available)
+    ...(row.created_at && { created_at: row.created_at }),
   }));
 };
 
@@ -54,6 +56,7 @@ export const createIncome = async (income: Omit<Income, 'id'>): Promise<Income> 
       date: income.date,
       recurring_frequency: income.recurringFrequency || null,
       notes: income.notes || null,
+      // created_at is automatically set by database default (NOW())
     })
     .select()
     .single();
@@ -71,6 +74,8 @@ export const createIncome = async (income: Omit<Income, 'id'>): Promise<Income> 
     date: data.date,
     recurringFrequency: data.recurring_frequency || undefined,
     notes: data.notes || undefined,
+    // Include created_at for duplicate detection (if available)
+    ...(data.created_at && { created_at: data.created_at }),
   };
 };
 
@@ -105,6 +110,8 @@ export const updateIncome = async (income: Income): Promise<Income> => {
     date: data.date,
     recurringFrequency: data.recurring_frequency || undefined,
     notes: data.notes || undefined,
+    // Include created_at for duplicate detection (if available)
+    ...(data.created_at && { created_at: data.created_at }),
   };
 };
 
