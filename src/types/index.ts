@@ -48,6 +48,16 @@ export interface Loan {
   notes?: string;
 }
 
+export type InvestmentType = 'gold' | 'silver' | 'mutual_fund' | 'fd' | 'rd' | 'index_fund' | 'custom';
+
+export interface InvestmentMeta {
+  expectedReturnRate?: number; // Annual return rate as percentage (e.g., 8.5 for 8.5%)
+  fundName?: string; // For mutual funds/index funds
+  tenureMonths?: number; // For FD/RD
+  riskLevel?: 'Low' | 'Medium' | 'High'; // Risk assessment
+  [key: string]: any; // Allow additional metadata
+}
+
 export interface SavingsGoal {
   id: string;
   name: string;
@@ -58,6 +68,9 @@ export interface SavingsGoal {
   status?: GoalStatus;
   monthlySavingRequired?: number;
   feasibilityScore?: number;
+  // Investment fields (optional - for backward compatibility)
+  investmentType?: InvestmentType;
+  investmentMeta?: InvestmentMeta;
 }
 
 export interface ExpenseReductionSuggestion {

@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { loadGoals, saveGoal, deleteGoal, calculateGoalFeasibility } from '../store/slices/savingsGoalSlice';
-import type { SavingsGoal, GoalPriority, GoalStatus } from '../types';
+import type { SavingsGoal, GoalPriority, GoalStatus, InvestmentType } from '../types';
+import { calculateInvestmentGrowth } from '../utils/market/calculateInvestmentGrowth';
+import type { GrowthPrediction } from '../utils/market/types';
 import Modal from './Modal';
 import { Icon } from './common/Icon';
+import MarketRates from './MarketRates';
 
 const SavingsGoalModule = () => {
   const dispatch = useAppDispatch();
@@ -18,7 +21,13 @@ const SavingsGoalModule = () => {
     targetDate: '',
     currentSavings: 0,
     priority: 'Medium',
+    investmentType: undefined,
+    investmentMeta: undefined,
   });
+  const [growthPredictions, setGrowthPredictions] = useState<{ [goalId: string]: GrowthPrediction | null }>({});
+
+  const currency = profile?.currency || 'USD';
+  const currencySymbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'INR' ? '₹' : currency;
 
   useEffect(() => {
     dispatch(loadGoals());
@@ -44,6 +53,8 @@ const SavingsGoalModule = () => {
       targetDate: formData.targetDate || '',
       currentSavings: formData.currentSavings || 0,
       priority: formData.priority || 'Medium',
+      investmentType: formData.investmentType,
+      investmentMeta: formData.investmentMeta,
     };
 
     const feasibility = calculateGoalFeasibility(goal, monthlyIncome, monthlyExpenses);
@@ -62,10 +73,35 @@ const SavingsGoalModule = () => {
       targetDate: '',
       currentSavings: 0,
       priority: 'Medium',
+      investmentType: undefined,
+      investmentMeta: undefined,
     });
     setEditingGoal(null);
     setShowForm(false);
   };
+
+  // Load growth predictions for investment goals
+  useEffect(() => {
+    const loadPredictions = async () => {
+      const predictions: { [goalId: string]: GrowthPrediction | null } = {};
+      for (const goal of goals) {
+        if (goal.investmentType) {
+          try {
+            const prediction = await calculateInvestmentGrowth(goal, currency);
+            predictions[goal.id] = prediction;
+          } catch (error) {
+            console.warn(`Failed to calculate growth for goal ${goal.id}:`, error);
+            predictions[goal.id] = null;
+          }
+        }
+      }
+      setGrowthPredictions(predictions);
+    };
+
+    if (goals.length > 0) {
+      loadPredictions();
+    }
+  }, [goals, currency]);
 
   const handleEdit = (goal: SavingsGoal) => {
     setEditingGoal(goal);
@@ -78,9 +114,6 @@ const SavingsGoalModule = () => {
       dispatch(deleteGoal(id));
     }
   };
-
-  const currency = profile?.currency || 'USD';
-  const currencySymbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'INR' ? '₹' : currency;
 
   const getStatusColor = (status?: GoalStatus) => {
     switch (status) {
@@ -95,8 +128,39 @@ const SavingsGoalModule = () => {
     }
   };
 
+  const getInvestmentTypeLabel = (type?: InvestmentType): string => {
+    const labels: { [key in InvestmentType]: string } = {
+      gold: '🟨 Gold',
+      silver: '⚪ Silver',
+      mutual_fund: '📈 Mutual Fund',
+      fd: '🏦 Fixed Deposit',
+      rd: '💰 Recurring Deposit',
+      index_fund: '📊 Index Fund',
+      custom: '⚙️ Custom',
+    };
+    return type ? labels[type] : 'Regular Savings';
+  };
+
+  const getRiskLevelColor = (riskLevel?: 'Low' | 'Medium' | 'High'): string => {
+    switch (riskLevel) {
+      case 'Low':
+        return 'bg-green-100 text-green-800';
+      case 'Medium':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'High':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   return (
     <div>
+      {/* Market Rates Section */}
+      <div className="mb-6">
+        <MarketRates />
+      </div>
+
       <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1">Savings Goals</h2>
@@ -127,7 +191,14 @@ const SavingsGoalModule = () => {
           goals.map((goal) => (
             <div key={goal.id} className="card">
               <div className="flex justify-between items-start mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">{goal.name}</h3>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900">{goal.name}</h3>
+                  {goal.investmentType && (
+                    <span className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded bg-blue-100 text-blue-800">
+                      {getInvestmentTypeLabel(goal.investmentType)}
+                    </span>
+                  )}
+                </div>
                 <span
                   className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
                     goal.status
@@ -218,6 +289,44 @@ const SavingsGoalModule = () => {
                   </div>
                 )}
               </div>
+
+              {/* Growth Prediction for Investment Goals */}
+              {goal.investmentType && growthPredictions[goal.id] && (
+                <div className="pt-4 border-t border-gray-200 mb-4">
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-blue-900">Growth Prediction</span>
+                      <span className={`px-2 py-0.5 text-xs font-semibold rounded ${getRiskLevelColor(growthPredictions[goal.id]?.riskLevel)}`}>
+                        {growthPredictions[goal.id]?.riskLevel || 'N/A'} Risk
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Predicted Value:</span>
+                        <span className="font-semibold text-gray-900">
+                          {currencySymbol}
+                          {growthPredictions[goal.id]?.predictedValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Expected Growth:</span>
+                        <span className="font-semibold text-green-600">
+                          +{growthPredictions[goal.id]?.growthPercentage.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Annual Return:</span>
+                        <span className="font-semibold text-gray-900">
+                          {growthPredictions[goal.id]?.annualReturnRate.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-2 italic">
+                      {growthPredictions[goal.id]?.disclaimer}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
                 <button
@@ -324,6 +433,147 @@ const SavingsGoalModule = () => {
               aria-required="true"
             />
           </div>
+          <div>
+            <label htmlFor="investment-type" className="block text-sm font-medium text-gray-700 mb-2">
+              Investment Type (Optional)
+            </label>
+            <select
+              id="investment-type"
+              value={formData.investmentType || ''}
+              onChange={(e) => {
+                const type = e.target.value as InvestmentType | '';
+                setFormData({
+                  ...formData,
+                  investmentType: type || undefined,
+                  investmentMeta: type ? formData.investmentMeta : undefined,
+                });
+              }}
+              className="input"
+            >
+              <option value="">Regular Savings</option>
+              <option value="gold">🟨 Gold</option>
+              <option value="silver">⚪ Silver</option>
+              <option value="mutual_fund">📈 Mutual Fund</option>
+              <option value="fd">🏦 Fixed Deposit</option>
+              <option value="rd">💰 Recurring Deposit</option>
+              <option value="index_fund">📊 Index Fund</option>
+              <option value="custom">⚙️ Custom</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Select an investment type to enable growth predictions based on market data
+            </p>
+          </div>
+
+          {/* Investment Metadata Fields */}
+          {formData.investmentType && (
+            <div className="p-4 rounded-lg bg-blue-50 border border-blue-200 space-y-4">
+              <h4 className="text-sm font-semibold text-blue-900">Investment Details</h4>
+              
+              {(formData.investmentType === 'mutual_fund' || formData.investmentType === 'index_fund') && (
+                <div>
+                  <label htmlFor="fund-name" className="block text-sm font-medium text-gray-700 mb-2">
+                    Fund Name
+                  </label>
+                  <input
+                    type="text"
+                    id="fund-name"
+                    value={formData.investmentMeta?.fundName || ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        investmentMeta: {
+                          ...formData.investmentMeta,
+                          fundName: e.target.value,
+                        },
+                      })
+                    }
+                    className="input"
+                    placeholder="e.g., HDFC Equity Fund"
+                  />
+                </div>
+              )}
+
+              {(formData.investmentType === 'fd' || formData.investmentType === 'rd') && (
+                <div>
+                  <label htmlFor="tenure-months" className="block text-sm font-medium text-gray-700 mb-2">
+                    Tenure (Months)
+                  </label>
+                  <input
+                    type="number"
+                    id="tenure-months"
+                    value={formData.investmentMeta?.tenureMonths || ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        investmentMeta: {
+                          ...formData.investmentMeta,
+                          tenureMonths: parseInt(e.target.value) || undefined,
+                        },
+                      })
+                    }
+                    className="input"
+                    placeholder="e.g., 12, 24, 36"
+                    min="1"
+                  />
+                </div>
+              )}
+
+              {formData.investmentType === 'custom' && (
+                <div>
+                  <label htmlFor="expected-return" className="block text-sm font-medium text-gray-700 mb-2">
+                    Expected Annual Return Rate (%)
+                  </label>
+                  <input
+                    type="number"
+                    id="expected-return"
+                    value={formData.investmentMeta?.expectedReturnRate || ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        investmentMeta: {
+                          ...formData.investmentMeta,
+                          expectedReturnRate: parseFloat(e.target.value) || undefined,
+                        },
+                      })
+                    }
+                    className="input"
+                    placeholder="e.g., 8.5"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                  />
+                </div>
+              )}
+
+              {(formData.investmentType === 'mutual_fund' || formData.investmentType === 'index_fund') && (
+                <div>
+                  <label htmlFor="expected-return-mf" className="block text-sm font-medium text-gray-700 mb-2">
+                    Expected Annual Return Rate (%) <span className="text-gray-500 text-xs">(Optional - will use fund's historical CAGR if available)</span>
+                  </label>
+                  <input
+                    type="number"
+                    id="expected-return-mf"
+                    value={formData.investmentMeta?.expectedReturnRate || ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        investmentMeta: {
+                          ...formData.investmentMeta,
+                          expectedReturnRate: parseFloat(e.target.value) || undefined,
+                        },
+                      })
+                    }
+                    className="input"
+                    placeholder="e.g., 12.0"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
             <fieldset>
               <legend className="block text-sm font-medium text-gray-700 mb-3">

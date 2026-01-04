@@ -33,6 +33,8 @@ export const fetchSavingsGoals = async (): Promise<SavingsGoal[]> => {
     status: row.status || undefined,
     monthlySavingRequired: row.monthly_saving_required ? parseFloat(row.monthly_saving_required) : undefined,
     feasibilityScore: row.feasibility_score ? parseFloat(row.feasibility_score) : undefined,
+    investmentType: row.investment_type || undefined,
+    investmentMeta: row.investment_meta || undefined,
   }));
 };
 
@@ -58,6 +60,8 @@ export const createSavingsGoal = async (goal: Omit<SavingsGoal, 'id'>): Promise<
       status: goal.status || null,
       monthly_saving_required: goal.monthlySavingRequired || null,
       feasibility_score: goal.feasibilityScore || null,
+      investment_type: goal.investmentType || null,
+      investment_meta: goal.investmentMeta || null,
     })
     .select()
     .single();
@@ -77,6 +81,8 @@ export const createSavingsGoal = async (goal: Omit<SavingsGoal, 'id'>): Promise<
     status: data.status || undefined,
     monthlySavingRequired: data.monthly_saving_required ? parseFloat(data.monthly_saving_required) : undefined,
     feasibilityScore: data.feasibility_score ? parseFloat(data.feasibility_score) : undefined,
+    investmentType: data.investment_type || undefined,
+    investmentMeta: data.investment_meta || undefined,
   };
 };
 
@@ -95,6 +101,8 @@ export const updateSavingsGoal = async (goal: SavingsGoal): Promise<SavingsGoal>
       status: goal.status || null,
       monthly_saving_required: goal.monthlySavingRequired || null,
       feasibility_score: goal.feasibilityScore || null,
+      investment_type: goal.investmentType || null,
+      investment_meta: goal.investmentMeta || null,
     })
     .eq('id', goal.id)
     .select()
@@ -115,6 +123,8 @@ export const updateSavingsGoal = async (goal: SavingsGoal): Promise<SavingsGoal>
     status: data.status || undefined,
     monthlySavingRequired: data.monthly_saving_required ? parseFloat(data.monthly_saving_required) : undefined,
     feasibilityScore: data.feasibility_score ? parseFloat(data.feasibility_score) : undefined,
+    investmentType: data.investment_type || undefined,
+    investmentMeta: data.investment_meta || undefined,
   };
 };
 
