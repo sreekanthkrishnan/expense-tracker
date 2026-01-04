@@ -5,7 +5,8 @@
  * Users can sign in with email and password.
  */
 
-import { useState, FormEvent } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { signIn, clearError } from '../store/slices/authSlice';
 import { Icon } from '../components/common/Icon';

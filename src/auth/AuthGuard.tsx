@@ -30,7 +30,7 @@ const AuthGuard = ({ children }: AuthGuardProps) => {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event: string, session: any) => {
+      (event: string) => {
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           dispatch(initializeAuth());
         } else if (event === 'SIGNED_OUT') {

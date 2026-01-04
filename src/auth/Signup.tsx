@@ -5,7 +5,8 @@
  * Creates new user accounts with email and password.
  */
 
-import { useState, FormEvent } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { signUp, clearError } from '../store/slices/authSlice';
 import { Icon } from '../components/common/Icon';
